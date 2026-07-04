@@ -1,0 +1,34 @@
+{% extends 'billing/base.html' %}
+{% block title %}{% if form.instance.pk %}Editar categoría{% else %}Nueva categoría{% endif %}{% endblock %}
+{% block content %}
+<form method="post">
+  {% csrf_token %}
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <h2 class="mb-0"><i class="bi bi-collection me-2"></i>{% if form.instance.pk %}Editar categoría{% else %}Nueva categoría{% endif %}</h2>
+    <a href="{% url 'billing:productgroup_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver al listado</a>
+  </div>
+
+  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-7">
+      <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-header bg-white border-bottom py-3 px-4">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-card-list me-2 text-primary"></i>Información de la categoría</h5>
+        </div>
+        <div class="card-body p-4">
+          {% include 'billing/_field.html' with field=form.name %}
+          <div class="form-check form-switch mt-2">
+            {{ form.is_active }}
+            <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+          </div>
+        </div>
+        <div class="card-footer bg-white border-top d-flex justify-content-end gap-2 py-3 px-4">
+          <a href="{% url 'billing:productgroup_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+{% endblock %}

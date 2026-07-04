@@ -1,0 +1,132 @@
+{% extends 'billing/base.html' %}
+{% block title %}{{ product.name }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'billing:product_list' %}" class="text-decoration-none">
+        <i class="bi bi-box-seam me-1"></i>Productos
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{{ product.name }}</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+
+  <!-- ===== Columna izquierda: imagen + precio ===== -->
+  <div class="col-12 col-lg-5">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+      <div class="ratio ratio-1x1 bg-light">
+        {% if product.image %}
+        <img src="{{ product.image.url }}" alt="{{ product.name }}"
+             class="w-100 h-100 p-3" style="object-fit: contain;">
+        {% else %}
+        <div class="d-flex flex-column align-items-center justify-content-center text-muted">
+          <i class="bi bi-image" style="font-size: 4rem;"></i>
+          <p class="mt-2 mb-0 fst-italic">Sin imagen disponible</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 mt-4 text-center">
+      <div class="card-body py-4">
+        <p class="text-uppercase text-muted small fw-semibold mb-1">
+          <i class="bi bi-cash-coin me-1"></i>Precio unitario
+        </p>
+        <p class="display-5 fw-bold text-success mb-0">${{ product.unit_price }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Columna derecha: datos ===== -->
+  <div class="col-12 col-lg-7">
+    <div class="card border-0 shadow-sm rounded-4 h-100">
+
+      <div class="card-header bg-white border-0 d-flex justify-content-between align-items-start flex-wrap gap-2 pt-4 px-4">
+        <div>
+          <h3 class="fw-bold mb-1">{{ product.name }}</h3>
+          <span class="text-muted">
+            <i class="bi bi-tags me-1"></i>{{ product.brand.name }} &middot; {{ product.group.name }}
+          </span>
+        </div>
+        {% if product.is_active %}
+        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill px-3 py-2">
+          <i class="bi bi-check-circle me-1"></i>Activo
+        </span>
+        {% else %}
+        <span class="badge bg-secondary-subtle text-secondary-emphasis border rounded-pill px-3 py-2">
+          <i class="bi bi-slash-circle me-1"></i>Inactivo
+        </span>
+        {% endif %}
+      </div>
+
+      <div class="card-body px-4">
+        <!-- Datos clave en tarjetas -->
+        <div class="row g-3 mb-4">
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-award me-1"></i>Marca</div>
+              <div class="fs-6">{{ product.brand.name }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-collection me-1"></i>Grupo</div>
+              <div class="fs-6">{{ product.group.name }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-boxes me-1"></i>Stock</div>
+              <div class="fs-6">
+                {% if product.stock > 0 %}
+                <span class="badge bg-primary rounded-pill">{{ product.stock }} unidades</span>
+                {% else %}
+                <span class="badge bg-danger rounded-pill">Sin stock</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-calendar3 me-1"></i>Creado</div>
+              <div class="fs-6">{{ product.created_at|date:"d/m/Y H:i" }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Proveedores -->
+        <div class="mb-4">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-truck me-1"></i>Proveedores</div>
+          {% for s in product.suppliers.all %}
+          <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle rounded-pill px-3 py-2 me-1 mb-1">{{ s.name }}</span>
+          {% empty %}
+          <span class="text-muted fst-italic">Ninguno</span>
+          {% endfor %}
+        </div>
+
+        <!-- Descripción -->
+        <div>
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-card-text me-1"></i>Descripción</div>
+          <p class="mb-0 text-body-secondary">{{ product.description|default:"Sin descripción."|linebreaksbr }}</p>
+        </div>
+      </div>
+
+      <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
+        <a href="{% url 'billing:product_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Volver al listado
+        </a>
+        <a href="{% url 'billing:product_update' product.pk %}" class="btn btn-warning">
+          <i class="bi bi-pencil-square me-1"></i>Editar
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

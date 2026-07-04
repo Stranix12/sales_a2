@@ -1,0 +1,69 @@
+{% comment %}
+Selector de columnas reutilizable (modal + script).
+Incluir DENTRO del <form method="get"> de filtros para que las columnas se
+envíen junto a los filtros. Requiere 'all_columns' en el contexto
+(lo aporta ExportListMixin). Funciona con cualquier listado.
+{% endcomment %}
+<div class="modal fade" id="colsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content rounded-4 border-0 shadow">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title"><i class="bi bi-table me-2"></i>Campos visibles</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <span class="text-muted small">Marca las columnas que deseas visualizar (mínimo 1).</span>
+          <span class="badge bg-primary-subtle text-primary-emphasis" id="colsCounter"></span>
+        </div>
+        <div class="row g-2">
+          {% for col in all_columns %}
+          <div class="col-12 col-sm-6 col-md-4">
+            <div class="form-check col-check-item border rounded-3 p-2 ps-4 h-100">
+              <input class="form-check-input cols-check" type="checkbox" name="cols"
+                     value="{{ col.key }}" id="col_{{ col.key }}" {% if col.selected %}checked{% endif %}>
+              <label class="form-check-label w-100" for="col_{{ col.key }}">{{ col.label }}</label>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="colsSelectAll">
+            <i class="bi bi-check2-all me-1"></i>Seleccionar todo
+          </button>
+          <button type="submit" name="reset_cols" value="1" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Restablecer configuración
+          </button>
+        </div>
+        <button type="submit" class="btn btn-primary" id="colsApply">
+          <i class="bi bi-check-lg me-1"></i>Aplicar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const checks = Array.from(document.querySelectorAll('.cols-check'));
+  const counter = document.getElementById('colsCounter');
+  const total = checks.length;
+  function update() {
+    const n = checks.filter(c => c.checked).length;
+    if (counter) counter.textContent = 'Mostrando ' + n + ' de ' + total + ' columnas';
+  }
+  checks.forEach(c => c.addEventListener('change', update));
+  update();
+  const selectAll = document.getElementById('colsSelectAll');
+  if (selectAll) selectAll.addEventListener('click', () => { checks.forEach(c => c.checked = true); update(); });
+  const apply = document.getElementById('colsApply');
+  if (apply) apply.addEventListener('click', (e) => {
+    if (checks.filter(c => c.checked).length === 0) {
+      e.preventDefault();
+      alert('Debes seleccionar al menos una columna.');
+    }
+  });
+})();
+</script>

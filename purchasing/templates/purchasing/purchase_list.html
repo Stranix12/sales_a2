@@ -1,0 +1,88 @@
+{% extends 'billing/base.html' %}
+{% block title %}Purchases{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3><i class="bi bi-cart me-2"></i>Purchases</h3>
+  <div class="d-flex gap-2">
+    <a href="{% url 'purchasing:purchase_report' %}" class="btn btn-outline-dark">
+      <i class="bi bi-bar-chart me-1"></i>Avg. Cost Report
+    </a>
+    <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-success">
+      <i class="bi bi-plus-lg me-1"></i>New Purchase
+    </a>
+  </div>
+</div>
+
+<form method="get" class="card card-body bg-light mb-3">
+  <div class="row g-3">
+    <div class="col-md-4">
+      <label class="form-label">Supplier</label>
+      {{ filter_form.supplier }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">From</label>
+      {{ filter_form.date_from }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">To</label>
+      {{ filter_form.date_to }}
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Year</label>
+      {{ filter_form.year }}
+    </div>
+    <div class="col-md-2 d-flex align-items-end gap-2">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary">Clear</a>
+    </div>
+  </div>
+</form>
+
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>#</th>
+            <th>Supplier</th>
+            <th>Invoice No.</th>
+            <th>Date</th>
+            <th class="text-end">Subtotal</th>
+            <th class="text-end">Tax (15%)</th>
+            <th class="text-end">Total</th>
+            <th class="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for purchase in purchases %}
+          <tr>
+            <td>{{ purchase.id }}</td>
+            <td>{{ purchase.supplier }}</td>
+            <td>{{ purchase.document_number }}</td>
+            <td>{{ purchase.purchase_date|date:"d/m/Y H:i" }}</td>
+            <td class="text-end">${{ purchase.subtotal }}</td>
+            <td class="text-end">${{ purchase.tax }}</td>
+            <td class="text-end fw-bold">${{ purchase.total }}</td>
+            <td class="text-center">
+              <a href="{% url 'purchasing:purchase_detail' purchase.pk %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-eye"></i>
+              </a>
+              <a href="{% url 'purchasing:purchase_delete' purchase.pk %}" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash"></i>
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="text-center text-muted py-4">No purchases recorded yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,13 @@
+{% comment %}
+Botones reutilizables de exportación (PDF / Excel).
+Requiere la variable 'querystring' en el contexto (la aporta ExportListMixin)
+para conservar los filtros activos al exportar.
+Inclúyelo en cualquier listado que use ExportListMixin:
+    {% include 'billing/_export_buttons.html' %}
+{% endcomment %}
+<div class="btn-group" role="group" aria-label="Export">
+  <a href="?export=pdf{% if querystring %}&{{ querystring }}{% endif %}"
+     class="btn btn-outline-danger">PDF</a>
+  <a href="?export=excel{% if querystring %}&{{ querystring }}{% endif %}"
+     class="btn btn-outline-success">Excel</a>
+</div>

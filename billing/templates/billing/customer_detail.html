@@ -1,0 +1,110 @@
+{% extends 'billing/base.html' %}
+{% block title %}{{ customer.full_name }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'billing:customer_list' %}" class="text-decoration-none">
+        <i class="bi bi-people me-1"></i>Clientes
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{{ customer.full_name }}</li>
+  </ol>
+</nav>
+
+<div class="row g-4">
+
+  <!-- ===== Columna izquierda: avatar ===== -->
+  <div class="col-12 col-lg-5">
+    <div class="card border-0 shadow-sm rounded-4 text-center">
+      <div class="card-body py-5">
+        <div class="rounded-circle bg-primary-subtle text-primary-emphasis fw-bold d-flex align-items-center justify-content-center mx-auto mb-3"
+             style="width: 160px; height: 160px; font-size: 3.5rem;">
+          {{ customer.first_name|first|upper }}{{ customer.last_name|first|upper }}
+        </div>
+        <h4 class="fw-bold mb-1">{{ customer.full_name }}</h4>
+        <p class="text-muted mb-2"><i class="bi bi-card-text me-1"></i>{{ customer.dni }}</p>
+        {% if customer.is_active %}
+        <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill px-3 py-2">
+          <i class="bi bi-check-circle me-1"></i>Activo
+        </span>
+        {% else %}
+        <span class="badge bg-secondary-subtle text-secondary-emphasis border rounded-pill px-3 py-2">
+          <i class="bi bi-slash-circle me-1"></i>Inactivo
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Columna derecha: datos ===== -->
+  <div class="col-12 col-lg-7">
+    <div class="card border-0 shadow-sm rounded-4 h-100">
+      <div class="card-header bg-white border-0 pt-4 px-4">
+        <h5 class="text-uppercase text-muted fw-bold mb-0" style="letter-spacing: .05em;">
+          <i class="bi bi-info-circle me-2"></i>Información del cliente
+        </h5>
+      </div>
+
+      <div class="card-body px-4">
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-person me-1"></i>Nombres</div>
+              <div class="fs-6">{{ customer.first_name }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-person me-1"></i>Apellidos</div>
+              <div class="fs-6">{{ customer.last_name }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-envelope me-1"></i>Email</div>
+              <div class="fs-6">{{ customer.email|default:"—" }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-telephone me-1"></i>Teléfono</div>
+              <div class="fs-6">{{ customer.phone|default:"—" }}</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-geo-alt me-1"></i>Dirección</div>
+              <div class="fs-6">{{ customer.address|default:"—"|linebreaksbr }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-calendar3 me-1"></i>Creado</div>
+              <div class="fs-6">{{ customer.created_at|date:"d/m/Y H:i" }}</div>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="border rounded-3 p-3 h-100">
+              <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-clock-history me-1"></i>Actualizado</div>
+              <div class="fs-6">{{ customer.updated_at|date:"d/m/Y H:i" }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
+        <a href="{% url 'billing:customer_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Volver al listado
+        </a>
+        <a href="{% url 'billing:customer_update' customer.pk %}" class="btn btn-warning">
+          <i class="bi bi-pencil-square me-1"></i>Editar
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

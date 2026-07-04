@@ -1,0 +1,81 @@
+{% extends 'billing/base.html' %}
+{% block title %}Purchase #{{ purchase.id }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url 'purchasing:purchase_list' %}" class="text-decoration-none">
+        <i class="bi bi-cart me-1"></i>Purchases
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Purchase #{{ purchase.id }}</li>
+  </ol>
+</nav>
+
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-header bg-dark text-white py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-cart-check me-2"></i>Purchase #{{ purchase.id }}</h4>
+    <span class="badge bg-light text-dark">{{ purchase.purchase_date|date:"d/m/Y H:i" }}</span>
+  </div>
+  <div class="card-body p-4">
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <p class="mb-1"><strong><i class="bi bi-building me-1"></i>Supplier:</strong> {{ purchase.supplier }}</p>
+      </div>
+      <div class="col-md-6 text-md-end">
+        <p class="mb-1"><strong>Invoice No.:</strong> {{ purchase.document_number }}</p>
+        <p class="mb-0"><strong>Date:</strong> {{ purchase.purchase_date|date:"d/m/Y H:i" }}</p>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>Product</th>
+            <th class="text-center">Qty</th>
+            <th class="text-end">Unit Cost</th>
+            <th class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for detail in purchase.details.all %}
+          <tr>
+            <td>{{ detail.product.name }}</td>
+            <td class="text-center">{{ detail.quantity }}</td>
+            <td class="text-end">${{ detail.unit_cost }}</td>
+            <td class="text-end">${{ detail.subtotal }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted">No detail lines.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" class="text-end fw-bold">Subtotal:</td>
+            <td class="text-end">${{ purchase.subtotal }}</td>
+          </tr>
+          <tr>
+            <td colspan="3" class="text-end fw-bold">Tax (15%):</td>
+            <td class="text-end">${{ purchase.tax }}</td>
+          </tr>
+          <tr class="table-success">
+            <td colspan="3" class="text-end fw-bold fs-5">TOTAL:</td>
+            <td class="text-end fw-bold fs-5">${{ purchase.total }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
+    <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Back
+    </a>
+    <a href="{% url 'purchasing:purchase_delete' purchase.pk %}" class="btn btn-danger">
+      <i class="bi bi-trash me-1"></i>Delete
+    </a>
+  </div>
+</div>
+
+{% endblock %}

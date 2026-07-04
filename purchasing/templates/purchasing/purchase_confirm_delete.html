@@ -1,0 +1,20 @@
+{% extends 'billing/base.html' %}
+{% block title %}Delete Purchase{% endblock %}
+{% block content %}
+
+<div class="card border-0 shadow-sm rounded-4" style="max-width:500px; margin:auto;">
+  <div class="card-header bg-danger text-white py-3 px-4">
+    <h4 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Confirm Delete</h4>
+  </div>
+  <div class="card-body p-4 text-center">
+    <p class="fs-5">Are you sure you want to delete <strong>{{ object }}</strong>?</p>
+    <p class="text-muted small">All purchase lines will also be deleted. This action cannot be undone.</p>
+    <form method="post" class="d-flex gap-2 justify-content-center mt-3">
+      {% csrf_token %}
+      <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary">Cancel</a>
+      <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Yes, Delete</button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

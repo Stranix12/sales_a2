@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(.\\\\ent_sales_a2\\\\Scripts\\\\pip.exe install openpyxl reportlab)",
+      "PowerShell(.\\\\ent_sales_a2\\\\Scripts\\\\python.exe manage.py check)",
+      "PowerShell(.\\\\ent_sales_a2\\\\Scripts\\\\python.exe -m pip install openpyxl reportlab)",
+      "PowerShell(.\\\\ent_sales_a2\\\\Scripts\\\\python.exe _export_test.py)",
+      "PowerShell(.\\\\ent_sales_a2\\\\Scripts\\\\python.exe _export_verify.py)",
+      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\Davis\\\\Pictures\\\\sales_a2\\\\purchasing\\\\templates\\\\purchasing\")",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  }
+}

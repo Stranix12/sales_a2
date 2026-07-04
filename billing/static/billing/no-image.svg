@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Sin imagen">
+  <rect width="120" height="120" rx="10" fill="#e9ecef"/>
+  <g fill="none" stroke="#adb5bd" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="26" y="32" width="68" height="56" rx="6"/>
+    <circle cx="46" cy="52" r="7" fill="#adb5bd" stroke="none"/>
+    <path d="M30 80 L52 60 L66 72 L80 58 L90 68"/>
+  </g>
+  <text x="60" y="108" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#868e96" text-anchor="middle">Sin imagen</text>
+</svg>

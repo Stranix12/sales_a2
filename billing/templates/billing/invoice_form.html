@@ -1,0 +1,186 @@
+{% extends 'billing/base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-header bg-warning text-dark py-3 px-4">
+    <h4 class="mb-0"><i class="bi bi-receipt me-2"></i>{{ title }}</h4>
+  </div>
+  <div class="card-body p-4">
+    <form method="post" id="invoice-form">
+      {% csrf_token %}
+
+      <!-- Cabecera: cliente -->
+      <div class="row mb-4">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Cliente</label>
+          {{ form.customer }}
+          {% for error in form.customer.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+      </div>
+
+      <!-- Líneas de detalle -->
+      <h5 class="mb-3"><i class="bi bi-list-ul me-2"></i>Detalle de la factura</h5>
+      {{ formset.management_form }}
+      {% for error in formset.non_form_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle" id="detail-table">
+          <thead class="table-secondary">
+            <tr>
+              <th style="min-width:220px;">Producto</th>
+              <th style="width:110px;" class="text-center">Stock</th>
+              <th style="width:120px;">Cantidad</th>
+              <th style="width:150px;">Precio unit.</th>
+              <th style="width:130px;" class="text-end">Subtotal</th>
+              <th style="width:70px;" class="text-center">Elim.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for detail_form in formset %}
+            <tr class="detail-row">
+              <td>
+                {{ detail_form.product }}
+                {{ detail_form.id }}
+                {% for error in detail_form.product.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </td>
+              <td class="text-center">
+                <span class="badge bg-secondary stock-badge">—</span>
+              </td>
+              <td>
+                {{ detail_form.quantity }}
+                {% for error in detail_form.quantity.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </td>
+              <td>
+                {{ detail_form.unit_price }}
+                {% for error in detail_form.unit_price.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </td>
+              <td class="text-end">
+                <span class="fw-semibold text-success subtotal-cell">$0.00</span>
+              </td>
+              <td class="text-center">
+                {% if detail_form.instance.pk %}{{ detail_form.DELETE }}{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Totales en vivo -->
+      <div class="row justify-content-end mb-3">
+        <div class="col-md-4">
+          <table class="table table-sm mb-0">
+            <tr>
+              <td class="text-muted">Subtotal</td>
+              <td class="text-end fw-semibold" id="preview-subtotal">$0.00</td>
+            </tr>
+            <tr>
+              <td class="text-muted">IVA (15%)</td>
+              <td class="text-end fw-semibold" id="preview-tax">$0.00</td>
+            </tr>
+            <tr class="table-warning">
+              <td class="fw-bold">Total</td>
+              <td class="text-end fw-bold fs-5" id="preview-total">$0.00</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>El IVA (15%) se calcula automáticamente al guardar.</p>
+        <div class="d-flex gap-2">
+          <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-warning"><i class="bi bi-save me-1"></i>Guardar factura</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const PRODUCTS = {{ products_json|safe }};
+
+function updateRow(row) {
+  const sel = row.querySelector('select[id$="-product"]');
+  const qtyInput = row.querySelector('input[id$="-quantity"]');
+  const priceInput = row.querySelector('input[id$="-unit_price"]');
+  const stockBadge = row.querySelector('.stock-badge');
+  const subtotalCell = row.querySelector('.subtotal-cell');
+
+  const pid = sel ? sel.value : '';
+  const data = PRODUCTS[pid];
+
+  if (data) {
+    // Rellenar precio y bloquearlo
+    priceInput.value = data.price;
+    priceInput.readOnly = true;
+    priceInput.classList.add('bg-light', 'border-secondary-subtle');
+
+    // Mostrar stock disponible
+    const qty = parseInt(qtyInput.value) || 0;
+    if (data.stock <= 0) {
+      stockBadge.textContent = 'Sin stock';
+      stockBadge.className = 'badge bg-danger stock-badge';
+    } else {
+      stockBadge.textContent = 'Disp: ' + data.stock;
+      stockBadge.className = 'badge ' + (data.stock <= 5 ? 'bg-warning text-dark' : 'bg-success') + ' stock-badge';
+    }
+
+    // Validar cantidad vs stock
+    const err = row.querySelector('.stock-qty-error');
+    if (qty > data.stock) {
+      qtyInput.classList.add('is-invalid');
+      if (!err) {
+        const div = document.createElement('div');
+        div.className = 'text-danger small stock-qty-error';
+        div.textContent = 'Máximo disponible: ' + data.stock;
+        qtyInput.parentNode.appendChild(div);
+      } else {
+        err.textContent = 'Máximo disponible: ' + data.stock;
+      }
+    } else {
+      qtyInput.classList.remove('is-invalid');
+      if (err) err.remove();
+    }
+  } else {
+    // Sin producto seleccionado: precio editable
+    priceInput.readOnly = false;
+    priceInput.classList.remove('bg-light', 'border-secondary-subtle');
+    stockBadge.textContent = '—';
+    stockBadge.className = 'badge bg-secondary stock-badge';
+    const err = row.querySelector('.stock-qty-error');
+    if (err) err.remove();
+    qtyInput.classList.remove('is-invalid');
+  }
+
+  // Calcular subtotal de la fila
+  const qty = parseFloat(qtyInput.value) || 0;
+  const price = parseFloat(priceInput.value) || 0;
+  subtotalCell.textContent = '$' + (qty * price).toFixed(2);
+
+  updateTotals();
+}
+
+function updateTotals() {
+  let subtotal = 0;
+  document.querySelectorAll('tr.detail-row').forEach(row => {
+    const text = row.querySelector('.subtotal-cell').textContent;
+    subtotal += parseFloat(text.replace('$', '')) || 0;
+  });
+  const tax = subtotal * 0.15;
+  document.getElementById('preview-subtotal').textContent = '$' + subtotal.toFixed(2);
+  document.getElementById('preview-tax').textContent = '$' + tax.toFixed(2);
+  document.getElementById('preview-total').textContent = '$' + (subtotal + tax).toFixed(2);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('tr.detail-row').forEach(row => {
+    const sel = row.querySelector('select[id$="-product"]');
+    const qty = row.querySelector('input[id$="-quantity"]');
+    if (sel) sel.addEventListener('change', () => updateRow(row));
+    if (qty) qty.addEventListener('input', () => updateRow(row));
+    updateRow(row);
+  });
+});
+</script>
+{% endblock %}

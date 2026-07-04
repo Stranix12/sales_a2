@@ -1,0 +1,23 @@
+{% extends 'billing/base.html' %}
+{% block title %}Eliminar marca{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-7 col-lg-6">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+      <div class="card-header bg-danger text-white py-3 px-4">
+        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Eliminar marca</h5>
+      </div>
+      <div class="card-body p-4">
+        <p class="mb-1">¿Seguro que deseas eliminar la marca</p>
+        <p class="fs-5 fw-bold mb-3">{{ object.name }}</p>
+        <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>Esta acción no se puede deshacer.</p>
+        <form method="post" class="d-flex gap-2 justify-content-end mt-3">
+          {% csrf_token %}
+          <a href="{% url 'billing:brand_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Sí, eliminar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

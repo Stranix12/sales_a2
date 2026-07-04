@@ -1,0 +1,87 @@
+{% extends 'billing/base.html' %}
+{% block title %}Suppliers{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h2 class="mb-0">Suppliers</h2>
+  <div class="d-flex gap-2 flex-wrap">
+    <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#colsModal">
+      <i class="bi bi-sliders me-1"></i>Seleccionar columnas
+      <span class="badge bg-secondary ms-1">{{ visible_count }}/{{ total_columns }}</span>
+    </button>
+    {% include 'billing/_export_buttons.html' %}
+    <a href="{% url 'billing:supplier_create' %}" class="btn btn-primary">+ New Supplier</a>
+  </div>
+</div>
+
+<form method="get" class="card card-body bg-light mb-3">
+  <div class="row g-3">
+    <div class="col-md-3">
+      <label class="form-label">Empresa</label>
+      {{ filter_form.name }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Contacto</label>
+      {{ filter_form.contact_name }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Email</label>
+      {{ filter_form.email }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Estado</label>
+      {{ filter_form.is_active }}
+    </div>
+    <div class="col-md-3 d-flex align-items-end gap-2">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="{% url 'billing:supplier_list' %}" class="btn btn-outline-secondary">Clear</a>
+    </div>
+  </div>
+  {% include 'billing/_column_selector.html' %}
+</form>
+
+<p class="text-muted">
+  {{ page_obj.paginator.count }} result(s)
+  <span class="mx-1">&middot;</span>
+  <i class="bi bi-layout-three-columns"></i> Mostrando {{ visible_count }} de {{ total_columns }} columnas
+</p>
+
+<div class="table-responsive table-fade">
+  <table class="table table-striped table-hover align-middle">
+    <thead class="table-dark">
+      <tr>
+        {% for col in visible_columns %}<th>{{ col.label }}</th>{% endfor %}
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        {% for col in visible_columns %}
+        <td>
+          {% if col.key == 'name' %}{{ item.name }}
+          {% elif col.key == 'contact_name' %}{{ item.contact_name|default:'—' }}
+          {% elif col.key == 'email' %}{{ item.email|default:'—' }}
+          {% elif col.key == 'phone' %}{{ item.phone|default:'—' }}
+          {% elif col.key == 'address' %}{{ item.address|default:'—'|truncatechars:50 }}
+          {% elif col.key == 'is_active' %}
+            {% if item.is_active %}<span class="badge bg-success">Activo</span>
+            {% else %}<span class="badge bg-secondary">Inactivo</span>{% endif %}
+          {% elif col.key == 'created_at' %}{{ item.created_at|date:'d/m/Y H:i' }}
+          {% endif %}
+        </td>
+        {% endfor %}
+        <td class="text-nowrap">
+          <a href="{% url 'billing:supplier_detail' item.pk %}" class="btn btn-sm btn-info">Ver detalle</a>
+          <a href="{% url 'billing:supplier_update' item.pk %}" class="btn btn-sm btn-warning">Edit</a>
+          <a href="{% url 'billing:supplier_delete' item.pk %}" class="btn btn-sm btn-danger">Delete</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="{{ visible_columns|length|add:1 }}" class="text-center">No suppliers found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% include 'billing/_pagination.html' %}
+{% endblock %}

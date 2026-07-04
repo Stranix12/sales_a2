@@ -1,0 +1,157 @@
+{% extends 'billing/base.html' %}
+{% load static %}
+{% block title %}{% if form.instance.pk %}Editar producto{% else %}Nuevo producto{% endif %}{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+    <h2 class="mb-0">
+      <i class="bi bi-box-seam me-2"></i>
+      {% if form.instance.pk %}Editar producto{% else %}Nuevo producto{% endif %}
+    </h2>
+    <a href="{% url 'billing:product_list' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Volver al listado
+    </a>
+  </div>
+
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="row g-4">
+
+    <!-- ===== Columna izquierda: información ===== -->
+    <div class="col-12 col-lg-7">
+      <div class="card border-0 shadow-sm rounded-4 h-100">
+        <div class="card-header bg-white border-bottom py-3 px-4">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-card-list me-2 text-primary"></i>Información del producto</h5>
+        </div>
+        <div class="card-body p-4">
+          {% include 'billing/_field.html' with field=form.name %}
+          {% include 'billing/_field.html' with field=form.description %}
+
+          <div class="row">
+            <div class="col-md-6">{% include 'billing/_field.html' with field=form.brand %}</div>
+            <div class="col-md-6">{% include 'billing/_field.html' with field=form.group %}</div>
+          </div>
+
+          {% include 'billing/_field.html' with field=form.suppliers %}
+
+          <div class="row">
+            <!-- Precio unitario (con validación inmediata) -->
+            <div class="col-md-6">
+              <div class="mb-3">
+                <label for="id_unit_price" class="form-label fw-semibold">{{ form.unit_price.label }}</label>
+                <div class="input-group">
+                  <span class="input-group-text">$</span>
+                  {{ form.unit_price }}
+                </div>
+                {% if form.unit_price.help_text %}<div class="form-text">{{ form.unit_price.help_text }}</div>{% endif %}
+                <div class="text-danger small mt-1 d-none" id="priceLiveError">
+                  <i class="bi bi-exclamation-circle me-1"></i>El precio unitario debe ser mayor que cero.
+                </div>
+                {% for error in form.unit_price.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>{% endfor %}
+              </div>
+            </div>
+            <div class="col-md-6">{% include 'billing/_field.html' with field=form.stock %}</div>
+          </div>
+
+          <!-- Estado (switch) -->
+          <div class="form-check form-switch mt-2">
+            {{ form.is_active }}
+            <label class="form-check-label fw-semibold" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Columna derecha: imagen + resumen ===== -->
+    <div class="col-12 col-lg-5">
+      <div class="card border-0 shadow-sm rounded-4 h-100">
+        <div class="card-header bg-white border-bottom py-3 px-4">
+          <h5 class="mb-0 fw-bold"><i class="bi bi-image me-2 text-primary"></i>Imagen y resumen</h5>
+        </div>
+        <div class="card-body p-4 text-center">
+
+          <!-- Vista previa -->
+          <div class="d-flex justify-content-center mb-3">
+            <img id="imgPreview"
+                 src="{% if form.instance.image %}{{ form.instance.image.url }}{% else %}{% static 'billing/no-image.svg' %}{% endif %}"
+                 alt="Vista previa"
+                 class="img-thumbnail rounded-4 shadow-sm"
+                 style="width: 220px; height: 220px; object-fit: cover;">
+          </div>
+
+          <div class="mb-4 text-start">
+            <label for="id_image" class="form-label fw-semibold">{{ form.image.label }}</label>
+            {{ form.image }}
+            {% for error in form.image.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</div>{% endfor %}
+          </div>
+
+          <!-- Balance calculado dinámicamente -->
+          <div class="card bg-success-subtle border-0 rounded-4">
+            <div class="card-body py-3">
+              <p class="text-uppercase text-success-emphasis small fw-semibold mb-1">
+                <i class="bi bi-calculator me-1"></i>Balance (Precio × Stock)
+              </p>
+              <p class="display-6 fw-bold text-success mb-0" id="balanceValue">$0.00</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Botones -->
+  <div class="d-flex justify-content-end gap-2 mt-4">
+    <a href="{% url 'billing:product_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-save me-1"></i>Guardar</button>
+  </div>
+</form>
+
+<script>
+(function () {
+  const priceEl = document.getElementById('id_unit_price');
+  const stockEl = document.getElementById('id_stock');
+  const balanceEl = document.getElementById('balanceValue');
+  const priceErr = document.getElementById('priceLiveError');
+
+  function money(n) {
+    return '$' + (isFinite(n) ? n : 0).toLocaleString('es-EC', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+  }
+
+  function calcBalance() {
+    const p = parseFloat(priceEl ? priceEl.value : 0) || 0;
+    const s = parseInt(stockEl ? stockEl.value : 0) || 0;
+    if (balanceEl) balanceEl.textContent = money(p * s);
+  }
+
+  function validatePrice() {
+    if (!priceEl) return;
+    const v = parseFloat(priceEl.value);
+    const invalid = priceEl.value !== '' && !(v > 0);
+    priceEl.classList.toggle('is-invalid', invalid);
+    if (priceErr) priceErr.classList.toggle('d-none', !invalid);
+  }
+
+  [priceEl, stockEl].forEach(el => el && el.addEventListener('input', () => { calcBalance(); validatePrice(); }));
+  calcBalance();
+
+  // Vista previa de imagen inmediata
+  const imgInput = document.getElementById('id_image');
+  const preview = document.getElementById('imgPreview');
+  if (imgInput && preview) {
+    imgInput.addEventListener('change', function () {
+      const file = this.files && this.files[0];
+      if (file) preview.src = URL.createObjectURL(file);
+    });
+  }
+})();
+</script>
+{% endblock %}

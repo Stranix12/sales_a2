@@ -1,0 +1,48 @@
+{% extends 'billing/base.html' %}
+{% block title %}{{ group.name }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'billing:productgroup_list' %}" class="text-decoration-none"><i class="bi bi-collection me-1"></i>Categorías</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ group.name }}</li>
+  </ol>
+</nav>
+
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2 py-3 px-4">
+    <h4 class="mb-0"><i class="bi bi-collection me-2"></i>{{ group.name }}</h4>
+    {% if group.is_active %}
+    <span class="badge bg-success rounded-pill px-3 py-2">Activo</span>
+    {% else %}
+    <span class="badge bg-secondary rounded-pill px-3 py-2">Inactivo</span>
+    {% endif %}
+  </div>
+  <div class="card-body p-4">
+    <div class="row g-3">
+      <div class="col-sm-4">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-box-seam me-1"></i>Productos</div>
+          <div class="fs-6"><span class="badge bg-primary rounded-pill">{{ group.products.count }}</span></div>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-calendar3 me-1"></i>Creado</div>
+          <div class="fs-6">{{ group.created_at|date:"d/m/Y H:i" }}</div>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-clock-history me-1"></i>Actualizado</div>
+          <div class="fs-6">{{ group.updated_at|date:"d/m/Y H:i" }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
+    <a href="{% url 'billing:productgroup_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver al listado</a>
+    <a href="{% url 'billing:productgroup_update' group.pk %}" class="btn btn-warning"><i class="bi bi-pencil-square me-1"></i>Editar</a>
+  </div>
+</div>
+{% endblock %}
