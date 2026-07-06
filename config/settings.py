@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # third-party
     'django_extensions',
+    'anymail',
     # app users
     'billing',
     'purchasing',
@@ -125,16 +126,16 @@ DATABASES = {
 if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    # Por defecto Brevo (smtp-relay.brevo.com); se puede apuntar a otro
-    # proveedor (Gmail, SendGrid, etc.) sin tocar código, solo cambiando
-    # estas variables de entorno en el dashboard de Render.
-    EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp-relay.brevo.com')
-    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-    EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+    # Render bloquea las conexiones salientes por SMTP (puerto 587/465), así
+    # que en producción se usa la API HTTP de Brevo (puerto 443, nunca
+    # bloqueado) a través de django-anymail en vez de smtplib.
+    EMAIL_BACKEND = 'anymail.backends.brevo.EmailBackend'
+    ANYMAIL = {
+        'BREVO_API_KEY': os.environ.get('BREVO_API_KEY', ''),
+    }
 
+# IMPORTANTE: este remitente debe estar verificado en Brevo
+# (Senders, Domains & Dedicated IPs → Senders) o el envío falla.
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DEFAULT_FROM_EMAIL', 'Sales System <noreply@salessystem.local>'
 )
