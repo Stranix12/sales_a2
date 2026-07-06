@@ -9,7 +9,12 @@ services:
     name: sales-a2
     env: python
     plan: free
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+    # El plan free no incluye Shell interactivo, así que el superusuario y
+    # los roles se crean en cada build. setup_roles ya es idempotente
+    # (get_or_create); createsuperuser --noinput fallaría en el 2º deploy en
+    # adelante porque el usuario ya existe, por eso va envuelto en
+    # "|| true" (solo para ESE paso, no para todo el build).
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py setup_roles && (python manage.py createsuperuser --noinput || true)"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
@@ -29,4 +34,10 @@ services:
       - key: EMAIL_HOST_USER
         sync: false
       - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
         sync: false
