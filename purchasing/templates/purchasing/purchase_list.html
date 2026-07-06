@@ -69,6 +69,12 @@
               <a href="{% url 'purchasing:purchase_detail' purchase.pk %}" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-eye"></i>
               </a>
+              <a href="{% url 'purchasing:purchase_export_pdf' purchase.pk %}" class="btn btn-sm btn-outline-danger" title="Export to PDF">
+                <i class="bi bi-file-earmark-pdf"></i>
+              </a>
+              <a href="{% url 'purchasing:purchase_export_excel' purchase.pk %}" class="btn btn-sm btn-outline-success" title="Export to Excel">
+                <i class="bi bi-file-earmark-excel"></i>
+              </a>
               <a href="{% url 'purchasing:purchase_delete' purchase.pk %}" class="btn btn-sm btn-outline-danger">
                 <i class="bi bi-trash"></i>
               </a>

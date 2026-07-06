@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 from decimal import Decimal
 from billing.models import Supplier, Product   # Reutilizamos modelos de billing
  
@@ -40,8 +41,10 @@ class PurchaseDetail(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.PROTECT, related_name='purchase_details'
     )
-    quantity = models.PositiveIntegerField(default=1)
-    unit_cost = models.DecimalField(max_digits=12, decimal_places=2)
+    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    unit_cost = models.DecimalField(
+        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))]
+    )
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
  
     def __str__(self):

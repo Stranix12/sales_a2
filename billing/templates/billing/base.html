@@ -1,3 +1,4 @@
+{% load security_tags %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -26,13 +27,34 @@
       <ul class="navbar-nav me-auto">
         {% if user.is_authenticated %}
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:home' %}">Home</a></li>
+
+        <!-- COMPRAS: Analista de Compras y Administrador -->
+        {% if user|has_group:'Analista de Compras' or user|has_group:'Administrador' %}
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:brand_list' %}">Brands</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:productgroup_list' %}">Groups</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:supplier_list' %}">Suppliers</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:product_list' %}">Products</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'purchasing:purchase_list' %}">Purchases</a></li>
+        {% endif %}
+
+        <!-- VENTAS: Vendedor y Administrador -->
+        {% if user|has_group:'Vendedor' or user|has_group:'Administrador' %}
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:customer_list' %}">Customers</a></li>
         <li class="nav-item"><a class="nav-link" href="{% url 'billing:invoice_list' %}">Invoices</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'purchasing:purchase_list' %}">Purchases</a></li>
+        {% endif %}
+
+        <!-- SEGURIDAD: solo Administrador -->
+        {% if user|has_group:'Administrador' %}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">Security</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{% url 'security:user_list' %}">Users</a></li>
+            <li><a class="dropdown-item" href="{% url 'security:group_list' %}">Roles</a></li>
+            <li><a class="dropdown-item" href="{% url 'security:permission_list' %}">Permissions</a></li>
+          </ul>
+        </li>
+        {% endif %}
+
         {% endif %}
       </ul>
       <ul class="navbar-nav">
@@ -46,7 +68,7 @@
         </li>
         {% else %}
         <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">Login</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'billing:signup' %}">Sign Up</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'security:register' %}">Sign Up</a></li>
         {% endif %}
       </ul>
     </div>

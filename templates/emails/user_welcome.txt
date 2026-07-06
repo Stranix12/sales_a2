@@ -1,0 +1,11 @@
+Hola {{ user.first_name|default:user.username }},
+
+Tu cuenta en Sales System fue creada exitosamente.
+
+  Usuario:       {{ user.username }}
+  Rol asignado:  {{ roles }}
+
+Ya puedes iniciar sesión en el sistema con tus credenciales.
+
+Saludos,
+Sales System

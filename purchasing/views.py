@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from billing.models import Product
 from .models import Purchase, PurchaseDetail
 from .forms import PurchaseForm, PurchaseDetailFormSet, PurchaseFilterForm
+from .exports import export_purchase_excel, export_purchase_pdf
 
 
 @login_required
@@ -76,6 +77,26 @@ def purchase_detail(request, pk):
         pk=pk,
     )
     return render(request, 'purchasing/purchase_detail.html', {'purchase': purchase})
+
+
+@login_required
+def purchase_export_pdf(request, pk):
+    """Exporta una compra individual a PDF (cabecera + líneas)."""
+    purchase = get_object_or_404(
+        Purchase.objects.select_related('supplier').prefetch_related('details__product'),
+        pk=pk,
+    )
+    return export_purchase_pdf(purchase)
+
+
+@login_required
+def purchase_export_excel(request, pk):
+    """Exporta una compra individual a Excel (cabecera + líneas)."""
+    purchase = get_object_or_404(
+        Purchase.objects.select_related('supplier').prefetch_related('details__product'),
+        pk=pk,
+    )
+    return export_purchase_excel(purchase)
 
 
 @login_required

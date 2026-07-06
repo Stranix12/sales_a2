@@ -72,6 +72,12 @@
     <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary">
       <i class="bi bi-arrow-left me-1"></i>Back
     </a>
+    <a href="{% url 'purchasing:purchase_export_pdf' purchase.pk %}" class="btn btn-outline-danger">
+      <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+    </a>
+    <a href="{% url 'purchasing:purchase_export_excel' purchase.pk %}" class="btn btn-outline-success">
+      <i class="bi bi-file-earmark-excel me-1"></i>Excel
+    </a>
     <a href="{% url 'purchasing:purchase_delete' purchase.pk %}" class="btn btn-danger">
       <i class="bi bi-trash me-1"></i>Delete
     </a>

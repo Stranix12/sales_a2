@@ -33,3 +33,4 @@ venv.bak/
 media/
 staticfiles/
 .DS_Store
+backup_datos.json

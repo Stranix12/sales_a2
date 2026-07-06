@@ -1,0 +1,14 @@
+Hola {{ customer.first_name }} {{ customer.last_name }},
+
+Se generó tu factura #{{ invoice.id }} el {{ invoice.invoice_date|date:"d/m/Y H:i" }}.
+
+Detalle:
+{% for d in details %}  - {{ d.product.name }} x {{ d.quantity }} = ${{ d.subtotal|floatformat:2 }}
+{% endfor %}
+  Subtotal:      ${{ invoice.subtotal|floatformat:2 }}
+  IVA (15%):     ${{ invoice.tax|floatformat:2 }}
+  TOTAL:         ${{ invoice.total|floatformat:2 }}
+
+Gracias por tu compra.
+
+Sales System

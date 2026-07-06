@@ -15,6 +15,7 @@ from .forms import (SignUpForm, BrandForm, BrandFilterForm, ProductFilterForm, P
 from .mixins import ExportListMixin
 from shared.mixins import StaffRequiredMixin
 from shared.decorators import audit_action
+from shared.emails import send_invoice_email
 
 
 # === HOME (Página principal / Dashboard) ===
@@ -405,6 +406,7 @@ def invoice_create(request):
                 invoice.tax = subtotal * Decimal('0.15')
                 invoice.total = invoice.subtotal + invoice.tax
                 invoice.save()
+                send_invoice_email(invoice)
                 messages.success(request, f'Factura #{invoice.id} creada. Total: ${invoice.total}')
                 return redirect('billing:invoice_list')
     else:

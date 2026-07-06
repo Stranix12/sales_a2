@@ -10,7 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,13 +22,38 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
+# En local no hace falta definir estas variables de entorno (quedan los
+# valores por defecto de abajo). En Render se configuran en el dashboard:
+# SECRET_KEY, DEBUG=False, DATABASE_URL (la inyecta el addon de Postgres),
+# EMAIL_HOST_USER, EMAIL_HOST_PASSWORD.
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-k!hmq*6lt9vzzh!_-3a+tu1w9yb=p*_4-o^#$uzos)u81zv^$s'
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY', 'django-insecure-k!hmq*6lt9vzzh!_-3a+tu1w9yb=p*_4-o^#$uzos)u81zv^$s'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# Render inyecta el hostname público del servicio en esta variable.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+    CSRF_TRUSTED_ORIGINS = [f'https://{RENDER_EXTERNAL_HOSTNAME}']
+
+# HTTPS: Render termina el TLS en su proxy y reenvía por HTTP interno, por
+# eso hace falta decirle a Django que confíe en X-Forwarded-Proto para saber
+# que la conexión original sí fue segura (si no, SECURE_SSL_REDIRECT causaría
+# un loop de redirecciones). Todo esto solo aplica cuando DEBUG=False.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 7  # 1 semana
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
 
 # Application definition
@@ -42,11 +70,13 @@ INSTALLED_APPS = [
     # app users
     'billing',
     'purchasing',
+    'security',
 
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -78,12 +108,33 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# Local: Postgres en Docker (docker run ... postgres:15, ver README).
+# Render: usa DATABASE_URL, que el addon de Postgres inyecta automáticamente.
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'dbsalesa2.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default='postgres://django_user:sales_password@localhost:5432/sales_a2',
+        conn_max_age=600,
+    )
 }
+
+
+# Email
+# En desarrollo (DEBUG=True) los correos se imprimen en la consola de
+# runserver. En producción (DEBUG=False, Render) se envían por SMTP real,
+# usando las credenciales configuradas como variables de entorno.
+if DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL', 'Sales System <noreply@salessystem.local>'
+)
 
 
 # Password validation
@@ -121,6 +172,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Media files (subidas de usuario: imágenes de productos, etc.)
 MEDIA_URL = 'media/'

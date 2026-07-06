@@ -8,6 +8,7 @@ urlpatterns = [
     path('accounts/', include('django.contrib.auth.urls')),
     path('', include('billing.urls')),
     path('purchases/', include('purchasing.urls')),
+    path('security/', include('security.urls')),  
 ]
 
 # Sirve los archivos subidos (MEDIA) durante el desarrollo (DEBUG=True).

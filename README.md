@@ -244,9 +244,372 @@ la misma tabla en la base de datos.
 ## Rutas de `purchasing`
 
 ```
-/purchases/            → purchase_list   (con filtros)
-/purchases/create/     → purchase_create (formset + suma de stock)
-/purchases/report/     → purchase_report (costo promedio por producto)
-/purchases/<id>/       → purchase_detail
-/purchases/<id>/delete/→ purchase_delete
+/purchases/                    → purchase_list        (con filtros)
+/purchases/create/             → purchase_create       (formset + suma de stock)
+/purchases/report/             → purchase_report       (costo promedio por producto)
+/purchases/<id>/                → purchase_detail
+/purchases/<id>/delete/          → purchase_delete
+/purchases/<id>/export/pdf/      → purchase_export_pdf
+/purchases/<id>/export/excel/    → purchase_export_excel
 ```
+
+## Exportación individual de una compra (PDF / Excel)
+
+**Objetivo:** cada registro de `Purchase` (no el listado completo) puede
+descargarse como comprobante en PDF o en Excel, con su cabecera (proveedor,
+n° de factura, fecha) y todas sus líneas de detalle (producto, cantidad,
+costo unitario, subtotal) más los totales (subtotal, IVA, total).
+
+### Cómo se relaciona con `ExportListMixin` (sección 3, arriba)
+
+Es un caso distinto al de `ExportListMixin` y por eso **no se reutiliza tal
+cual**:
+
+| | `ExportListMixin` (`billing`) | Exportación individual (`purchasing`) |
+|---|---|---|
+| Qué exporta | Un **listado** (N filas filtradas) | **Un** `Purchase` con sus líneas |
+| Forma del documento | Tabla plana, una fila = un objeto | Documento tipo comprobante: cabecera + tabla de líneas + totales |
+| Vistas base | `ListView` (CBV) | Funciones (`purchase_detail`, etc.) — `purchasing` usa FBV, no CBV |
+| Se activa con | `?export=pdf`/`?export=excel` sobre la misma URL del listado | URL propia por registro: `/purchases/<id>/export/pdf/` |
+
+Sí se mantiene el **mismo estándar visual y técnico** que `ExportListMixin`,
+para que todos los documentos generados por el sistema se vean consistentes:
+
+- Mismas librerías: **`openpyxl`** para `.xlsx` y **`reportlab`** para PDF.
+- Mismo color de cabecera de tabla (`#343A40`, blanco y negrita) y mismas
+  filas alternas grises en el PDF.
+- Mismo criterio de nombre de archivo con marca de tiempo, p. ej.
+  `Compra_3_20260706_1424.pdf`.
+- Mismas fechas localizadas con `timezone.localtime()` y formato `d/m/Y H:i`.
+
+### Cómo se implementó
+
+**Nuevo:** [purchasing/exports.py](purchasing/exports.py)
+
+- `export_purchase_pdf(purchase)` y `export_purchase_excel(purchase)`: reciben
+  el objeto `Purchase` (ya resuelto con `select_related('supplier')` +
+  `prefetch_related('details__product')` para evitar N+1) y devuelven un
+  `HttpResponse` con el archivo listo para descargar.
+- Son **funciones puras** (no un mixin de CBV) porque `purchasing` está
+  construido con vistas basadas en función (FBV); así el patrón encaja con el
+  resto de la app en vez de forzar una migración a CBV solo para exportar.
+
+**Modificado:** [purchasing/views.py](purchasing/views.py)
+
+```python
+@login_required
+def purchase_export_pdf(request, pk):
+    purchase = get_object_or_404(
+        Purchase.objects.select_related('supplier').prefetch_related('details__product'),
+        pk=pk,
+    )
+    return export_purchase_pdf(purchase)
+```
+
+(`purchase_export_excel` es igual, solo cambia la función de `exports.py` que
+llama al final.) Ambas vistas reutilizan el mismo patrón `get_object_or_404`
++ `select_related`/`prefetch_related` que ya usa `purchase_detail`.
+
+**Modificado:** [purchasing/urls.py](purchasing/urls.py) — dos rutas nuevas,
+anidadas bajo el `pk` del registro (igual que `purchase_delete`):
+
+```python
+path('<int:pk>/export/pdf/', views.purchase_export_pdf, name='purchase_export_pdf'),
+path('<int:pk>/export/excel/', views.purchase_export_excel, name='purchase_export_excel'),
+```
+
+**Modificado:** botones "PDF"/"Excel" en dos plantillas —
+[purchase_list.html](purchasing/templates/purchasing/purchase_list.html)
+(un ícono por fila, junto a Ver/Eliminar) y
+[purchase_detail.html](purchasing/templates/purchasing/purchase_detail.html)
+(botones en el pie de la tarjeta) — cada uno apunta directo a
+`{% url 'purchasing:purchase_export_pdf' purchase.pk %}` /
+`..._export_excel`, sin parámetros extra (a diferencia de
+`_export_buttons.html`, aquí no hay filtros ni columnas que conservar porque
+el documento es siempre el mismo registro completo).
+
+No se agregaron dependencias nuevas: `openpyxl` y `reportlab` ya estaban
+instaladas para `ExportListMixin`.
+
+## Validación: no aceptar valores negativos en compras
+
+**Bug reportado:** el formulario de líneas de compra aceptaba cantidades y
+costos unitarios negativos, generando compras con `subtotal`/`tax`/`total`
+negativos (se detectó una Purchase real con total `$-0.08`, ya eliminada).
+
+**Causa:** [purchasing/models.py](purchasing/models.py) —
+`PurchaseDetail.quantity` era `PositiveIntegerField` **sin** validador
+adicional (Django solo garantiza `>= 0`, es decir el `0` pasaba) y
+`unit_cost` era un `DecimalField` **sin ningún validador**, así que
+aceptaba cualquier número, incluido negativo.
+
+**Corrección** — [purchasing/models.py](purchasing/models.py):
+
+```python
+from django.core.validators import MinValueValidator
+
+quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+unit_cost = models.DecimalField(
+    max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))]
+)
+```
+
+`PurchaseDetailFormSet` (en [purchasing/forms.py](purchasing/forms.py)) es un
+`inlineformset_factory` que genera sus campos a partir del modelo, así que
+estos validadores se heredan automáticamente en el formulario — no hace
+falta tocar `forms.py`. Se generó y aplicó la migración
+`purchasing/migrations/0003_alter_purchasedetail_quantity_and_more.py`.
+
+Con esto, `formset.is_valid()` ahora rechaza cantidad `<= 0` o costo
+unitario `<= 0` antes de guardar, y el error se muestra por línea en
+[purchase_form.html](purchasing/templates/purchasing/purchase_form.html)
+(igual que cualquier otro error de campo del formset).
+
+---
+
+# Consola de Roles y Permisos (`security`)
+
+**Objetivo:** la pantalla de "Roles" (`Group` de `django.contrib.auth`) ya no
+es una tabla + un formulario aparte. Ahora es **un solo panel dividido**:
+la lista de roles a la izquierda y la grilla de permisos del rol
+seleccionado a la derecha. Al hacer clic en otro rol (p. ej.
+"Administrador"), el panel derecho cambia para mostrar/editar los permisos
+de ese rol — sin salir de la pantalla ni abrir un formulario distinto.
+
+Antes de tocar código se hizo un mockup en HTML puro (con datos de ejemplo
+y JS sin backend) para acordar el diseño; una vez aprobado, se implementó
+sobre los modelos reales del proyecto.
+
+## Cómo se relaciona con el resto del proyecto
+
+No se creó ningún modelo nuevo — todo se apoya en lo que Django ya trae:
+
+| Concepto de la UI | Modelo real |
+|---|---|
+| "Rol" | `django.contrib.auth.models.Group` |
+| "Permiso" (Ver/Crear/Editar/Eliminar) | `django.contrib.auth.models.Permission` |
+| Módulo (p. ej. "Producto") | `django.contrib.contenttypes.models.ContentType` |
+| Nombre del módulo en pantalla | `content_type.model_class()._meta.verbose_name` — el mismo `verbose_name` ya definido en cada modelo de `billing`/`purchasing` (p. ej. `Product Group`, `Purchase Detail`), no se inventó ningún texto nuevo |
+
+Los 3 roles del sistema (`Administrador`, `Vendedor`, `Analista de Compras`)
+y sus permisos siguen creándose igual, con
+`security/management/commands/setup_roles.py`. La consola simplemente da
+una forma más rápida de **verlos y ajustarlos** después.
+
+## Cómo se implementó
+
+**Rutas:** no se agregó ninguna — se reutilizan las 4 que ya existían en
+[security/urls.py](security/urls.py) (`roles/`, `roles/create/`,
+`roles/<pk>/edit/`, `roles/<pk>/delete/`).
+
+**[security/views.py](security/views.py):**
+
+- `GroupListView` ya no lista en tabla: `/roles/` redirige directo a editar
+  el primer rol (o a crear uno si no existe ninguno). La "lista" ahora vive
+  siempre visible en el rail de la propia consola.
+- `_permission_matrix(selected_ids)` — agrupa `Permission.objects` por
+  `content_type` (modelo) y por acción (`view`/`add`/`change`/`delete`),
+  marcando cada permiso como seleccionado o no. Excluye `admin`,
+  `contenttypes` y `sessions` (infraestructura de Django sin pantallas de
+  negocio en este sistema) y ordena primero `billing`/`purchasing` (lo que
+  el Administrador ajusta más seguido) y `auth` al final.
+- `_roles_with_colors()` — trae todos los roles con `annotate(Count(...))`
+  para el conteo de usuarios/permisos del rail, y les asigna un color
+  determinístico (por posición) para diferenciarlos visualmente.
+- `GroupConsoleMixin` — contexto compartido por crear y editar: arma
+  `all_groups` (rail) y `permission_matrix` (grilla). Si el formulario viene
+  con errores (`form.is_bound`), reconstruye la selección desde
+  `form['permissions'].value()` en vez de la base de datos, para no perder
+  las casillas que el usuario acababa de marcar.
+- `GroupCreateView`/`GroupUpdateView` reutilizan el `GroupForm` que ya
+  existía (sin cambios en `forms.py`) y ahora redirigen de vuelta a la
+  consola del rol (`group_update`) tras guardar, en vez de a una lista.
+
+**Plantilla nueva:** [security/group_console.html](security/templates/security/group_console.html)
+(reemplaza a `group_list.html` + `group_form.html`, eliminados).
+
+- La grilla de permisos **no usa el widget por defecto** de
+  `CheckboxSelectMultiple` (`{{ form.permissions }}`) porque no se puede
+  agrupar por módulo con columnas de color; en su lugar se pintan los
+  checkboxes a mano con `name="permissions" value="{{ perm.id }}"`. Esto es
+  un patrón estándar de Django: como el `name` y los `value` coinciden con
+  lo que espera `ModelMultipleChoiceField`, el `POST` se valida y guarda
+  igual que si se hubiera usado el widget automático — no se tocó
+  `GroupForm`.
+- El campo `name` del rol se muestra como un input de texto integrado en el
+  encabezado (en vez de un `<label>` + `<input>` separados), pero sigue
+  siendo el mismo campo del formulario.
+- Sin JavaScript de estado paralelo: los filtros de rol/módulo y el botón
+  "Seleccionar todos" operan directo sobre los checkboxes reales del DOM;
+  el contador "N de M permisos" se recalcula escuchando el evento `change`
+  del formulario. Cambiar de rol es una navegación normal (`<a href=...>`),
+  no una llamada AJAX — no hizo falta ningún endpoint nuevo.
+- Colores por acción (Ver=azul, Crear=verde, Editar=ámbar, Eliminar=rojo)
+  para distinguir de un vistazo qué tan invasivo es cada permiso.
+
+## Estándar seguido
+
+Mismo patrón que el resto de `security` y `billing`: CBVs (`CreateView`/
+`UpdateView`) protegidas con el mixin ya existente `AdminOnlyMixin` (solo
+rol Administrador o superusuario), mensajes con `django.contrib.messages`
+igual que en `billing_create`/`purchase_create`, y reutilización de
+`GroupForm`/`Group`/`Permission`/`ContentType` sin duplicar modelos ni
+lógica de validación. No se agregó ninguna dependencia nueva.
+
+---
+
+# PostgreSQL en Docker (antes SQLite)
+
+**Objetivo:** cambiar el motor de base de datos de SQLite a PostgreSQL,
+corriendo en un contenedor Docker local. Así el entorno de desarrollo queda
+igual al de producción (Render usa PostgreSQL), sin instalar PostgreSQL
+directamente en Windows.
+
+## Cómo se hizo
+
+```bash
+docker run --name sales_postgres \
+  -e POSTGRES_DB=sales_a2 \
+  -e POSTGRES_USER=django_user \
+  -e POSTGRES_PASSWORD=sales_password \
+  -p 5432:5432 \
+  -d postgres:15
+
+pip install psycopg2-binary
+```
+
+**[config/settings.py](config/settings.py)** — `DATABASES['default']` apunta
+al contenedor (`ENGINE: postgresql`, `HOST: localhost`, `PORT: 5432`).
+
+## El problema del "shampoo" de migraciones (y cómo se evitó)
+
+Al limpiar `*/migrations/` para partir con una base ordenada, se borraron por
+error migraciones que ya estaban aplicadas en SQLite (`0003_product_image`,
+`0004_alter_customer_dni`, etc.) pero se dejó el `0001_initial` **viejo**,
+que no incluía esos cambios. Resultado: `models.py` tenía campos
+(`Product.image`, `Customer.dni`) que la migración conservada no creaba →
+`ProgrammingError: column billing_product.image does not exist`.
+
+**Corrección:** en vez de reconciliar migraciones a mano, se regeneró todo
+desde el estado *actual* del código, que es la fuente de verdad:
+
+```bash
+# 1) Borrar TODAS las migraciones de billing/purchasing (no solo las nuevas)
+rm billing/migrations/0001_initial.py purchasing/migrations/0001_initial.py
+
+# 2) Regenerar migraciones que sí coinciden con models.py tal como está hoy
+python manage.py makemigrations billing purchasing
+
+# 3) Base de datos limpia (no había datos reales que perder en Postgres)
+#    y aplicar las migraciones nuevas
+python manage.py migrate
+```
+
+**Regla para el futuro:** nunca dejar un `0001_initial` de una versión
+anterior del modelo. O se conservan **todas** las migraciones intermedias,
+o se borran **todas** y se regeneran con `makemigrations` contra el
+`models.py` actual — nunca una mezcla de las dos cosas.
+
+## Datos de prueba
+
+Al recrear la base de datos se perdieron los datos de prueba (productos,
+clientes, facturas de SQLite) — no tenían la misma estructura que el
+`models.py` actual, así que no se pudieron migrar directo con
+`loaddata`. Se recrearon con:
+
+```bash
+python manage.py createsuperuser   # admin_dav
+python manage.py setup_roles       # Administrador, Vendedor, Analista de Compras
+```
+
+---
+
+# Envío de Correos (bienvenida + factura)
+
+**Objetivo:** enviar un correo automático en dos momentos: (1) cuando se
+registra un usuario, y (2) cuando se crea una factura de cliente.
+
+## Cómo se relaciona con el resto del proyecto
+
+- No se creó ningún modelo nuevo — se reutiliza `User.email` y
+  `Customer.email` (ya existían).
+- Se reutiliza el patrón de `shared/` (igual que `shared/mixins.py`,
+  `shared/decorators.py`, `shared/validators.py`): un módulo de utilidades
+  sin estado, importado por las apps que lo necesitan, sin duplicar lógica.
+- Se llama explícitamente desde la vista, igual que el resto del proyecto
+  llama a `messages.success(...)` después de guardar — no se usaron
+  *signals* de Django para mantener el flujo explícito y fácil de seguir
+  (ver "Por qué no signals" más abajo).
+
+## Cómo se implementó
+
+**Nuevo:** [shared/emails.py](shared/emails.py)
+
+- `send_welcome_email(user)` — arma el correo con el rol asignado
+  (`user.groups.all()`) y lo envía a `user.email`.
+- `send_invoice_email(invoice)` — arma el correo con las líneas de la
+  factura (`invoice.details.select_related('product')`) y los totales, lo
+  envía a `invoice.customer.email`.
+- Ambas funciones son defensivas: si el destinatario no tiene email
+  registrado, o si el envío falla, se registra en el logger `emails` y se
+  retorna `False` **sin lanzar excepción** — un problema de correo nunca
+  debe tumbar el registro de un usuario ni la creación de una factura.
+
+**Nuevas plantillas** (texto plano, un correo transaccional simple no
+necesita HTML):
+[templates/emails/user_welcome.txt](templates/emails/user_welcome.txt),
+[templates/emails/invoice_created.txt](templates/emails/invoice_created.txt).
+Los montos usan `|floatformat:2` porque el objeto `Invoice` recién guardado
+guarda en memoria el `Decimal` con más de 2 decimales
+(`Decimal('20.00') * Decimal('0.15')` = `Decimal('3.0000')`) hasta que se
+vuelve a leer de la base de datos.
+
+**Modificado:**
+- [security/views.py](security/views.py) — `RegisterView.form_valid()`
+  llama a `send_welcome_email(self.object)` justo después de `login()`.
+- [billing/views.py](billing/views.py) — `invoice_create` llama a
+  `send_invoice_email(invoice)` justo después de guardar los totales
+  finales, antes del `messages.success(...)` y el `redirect`.
+
+**Configuración** — [config/settings.py](config/settings.py):
+
+```python
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'Sales System <noreply@salessystem.local>'
+```
+
+En desarrollo los correos se **imprimen en la terminal** donde corre
+`runserver` (no hace falta SMTP real para probar el flujo). Para producción
+(Render), cambiar a SMTP real, por ejemplo con Gmail y variables de entorno:
+
+```python
+if not DEBUG:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = 'smtp.gmail.com'
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = os.environ['EMAIL_USER']
+    EMAIL_HOST_PASSWORD = os.environ['EMAIL_PASSWORD']  # contraseña de aplicación de Gmail
+```
+
+## Por qué no *signals*
+
+Se evaluaron dos estándares: `signals` (Django dispara el correo solo, al
+guardar el modelo) contra llamada explícita en la vista. Se eligió la
+llamada explícita porque:
+
+- El proyecto no usa signals en ningún otro lado — la auditoría
+  (`shared/decorators.py::audit_action`) y el descuento de stock en
+  compras/ventas ya se hacen con llamadas explícitas en la vista, no con
+  hooks implícitos. Mantener un solo estilo hace el código más predecible.
+- Es más fácil de explicar y depurar: la línea `send_invoice_email(invoice)`
+  está justo al lado de donde se calculan los totales, no "escondida" en
+  otro archivo que se dispara automáticamente.
+
+## Verificación
+
+Se probó el flujo completo (no solo import/sintaxis): se registró un
+usuario de prueba con rol "Vendedor" y se generó una factura de prueba vía
+`Client()` de Django, confirmando que ambos correos se imprimen en consola
+con el asunto, destinatario y cuerpo esperados, y luego se limpiaron los
+datos de prueba de la base de datos.

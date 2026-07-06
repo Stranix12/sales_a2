@@ -10,7 +10,22 @@
       "Bash(git init *)",
       "Bash(git config *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(gh repo *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(python)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\Davis\\\\Pictures\\\\sales_a2\\\\security\\\\templatetags\")",
+      "Bash(python manage.py setup_roles)",
+      "Bash(python -c ' *)",
+      "Bash(./ent_sales_a2/Scripts/python.exe manage.py check)",
+      "Bash(./ent_sales_a2/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(./ent_sales_a2/Scripts/python.exe manage.py makemigrations purchasing)",
+      "Bash(./ent_sales_a2/Scripts/python.exe manage.py migrate purchasing)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\Davis\\Pictures\\sales_a2\\security"
     ]
   }
 }
