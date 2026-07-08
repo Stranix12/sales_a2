@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.views import LoginView, LogoutView
@@ -11,7 +10,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from shared.emails import send_welcome_email
 from shared.mixins import GroupRequiredMixin
-from .forms import UserRegisterForm, UserUpdateForm, GroupForm, PermissionForm
+from .forms import UserCreateForm, UserUpdateForm, GroupForm, PermissionForm
 
 # === MIXIN BASE: SOLO ADMINISTRADOR ===
 class AdminOnlyMixin(LoginRequiredMixin, GroupRequiredMixin):
@@ -20,18 +19,6 @@ class AdminOnlyMixin(LoginRequiredMixin, GroupRequiredMixin):
     group_redirect_url = '/'
 
 # === AUTENTICACIÓN (CBV) ===
-class RegisterView(CreateView):
-    """Registro público con selección de rol."""
-    form_class = UserRegisterForm
-    template_name = 'security/register.html'
-    success_url = reverse_lazy('billing:home')
-
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        login(self.request, self.object)   # inicia sesión automáticamente
-        send_welcome_email(self.object)
-        return response
-
 class SecurityLoginView(LoginView):
     """Login con CBV. Reutiliza el template de la PARTE 9."""
     template_name = 'registration/login.html'
@@ -46,11 +33,28 @@ class UserListView(AdminOnlyMixin, ListView):
     template_name = 'security/user_list.html'
     context_object_name = 'items'
 
+class UserCreateView(AdminOnlyMixin, CreateView):
+    """No hay registro público: solo el Administrador crea usuarios."""
+    model = User
+    form_class = UserCreateForm
+    template_name = 'security/user_form.html'
+    success_url = reverse_lazy('security:user_list')
+    extra_context = {'title': 'Create User'}
+
+    def form_valid(self, form):
+        # A propósito NO se llama a login() aquí: quien crea la cuenta es el
+        # Administrador, no debe iniciar sesión como el usuario nuevo.
+        response = super().form_valid(form)
+        send_welcome_email(self.object)
+        messages.success(self.request, f'Usuario "{self.object.username}" creado.')
+        return response
+
 class UserUpdateView(AdminOnlyMixin, UpdateView):
     model = User
     form_class = UserUpdateForm
     template_name = 'security/user_form.html'
     success_url = reverse_lazy('security:user_list')
+    extra_context = {'title': 'Edit User'}
 
 class UserDeleteView(AdminOnlyMixin, DeleteView):
     model = User

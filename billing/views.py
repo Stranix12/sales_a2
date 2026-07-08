@@ -6,9 +6,8 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from django.urls import reverse_lazy
-from django.contrib.auth import login
 from .models import *
-from .forms import (SignUpForm, BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
+from .forms import (BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
                     CustomerForm, CustomerFilterForm, InvoiceForm, InvoiceDetailFormSet,
                     ProductGroupForm, ProductGroupFilterForm, SupplierForm, SupplierFilterForm,
                     InvoiceFilterForm)
@@ -31,16 +30,6 @@ def home(request):
         'low_stock': Product.objects.filter(stock__lte=5, is_active=True),
     }
     return render(request, 'billing/home.html', context)
-
-# === REGISTRO ===
-class SignUpView(CreateView):
-    form_class = SignUpForm
-    template_name = 'registration/signup.html'
-    success_url = reverse_lazy('billing:brand_list')
-    def form_valid(self, form):
-        response = super().form_valid(form)
-        login(self.request, self.object)
-        return response
 
 # === BRAND (lista CBV + create/update/delete FBV con auditoría) ===
 class BrandListView(ExportListMixin, LoginRequiredMixin, ListView):

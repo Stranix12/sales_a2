@@ -613,3 +613,87 @@ usuario de prueba con rol "Vendedor" y se generó una factura de prueba vía
 `Client()` de Django, confirmando que ambos correos se imprimen en consola
 con el asunto, destinatario y cuerpo esperados, y luego se limpiaron los
 datos de prueba de la base de datos.
+
+---
+
+# Registro restringido: solo el Administrador crea usuarios
+
+**Objetivo:** eliminar el autorregistro público. Antes, cualquier
+visitante podía crearse una cuenta (y elegir su propio rol) desde
+`/security/register/` o desde `/signup/`. Ahora solo un usuario con rol
+Administrador puede crear cuentas nuevas.
+
+## Lo que había que arreglar (dos rutas públicas, no una)
+
+El proyecto tenía **dos** formularios de registro coexistiendo, uno de una
+versión anterior del proyecto (antes de que existiera la app `security`):
+
+| Ruta | Vista | Problema |
+|---|---|---|
+| `/signup/` | `billing.SignUpView` | Sin selección de rol, sin correo de bienvenida, quedó huérfana tras crear `security` |
+| `/security/register/` | `security.RegisterView` | Pública, con rol, era la usada desde el navbar |
+
+Dejar cualquiera de las dos abiertas habría dejado una puerta trasera para
+crear cuentas sin pasar por el Administrador. Se eliminaron **ambas**.
+
+## Cómo se implementó
+
+**Eliminado por completo** (código muerto tras el cambio):
+`billing.SignUpView`, `billing.SignUpForm`, la ruta `signup/` en
+[billing/urls.py](billing/urls.py), y
+`templates/registration/signup.html`.
+
+**[security/views.py](security/views.py)** — `RegisterView` (pública) se
+convirtió en `UserCreateView`, protegida con el mismo `AdminOnlyMixin` que
+ya usan `GroupCreateView`/`PermissionCreateView`. Dos detalles importantes:
+
+- **Ya no llama a `login(self.request, self.object)`.** La vista vieja
+  iniciaba sesión automáticamente como el usuario recién creado porque
+  asumía que la persona se estaba registrando a sí misma. Ahora quien
+  llama a esta vista es el Administrador creando una cuenta *para otra
+  persona* — si se dejaba el `login()`, el Administrador habría perdido su
+  propia sesión y quedado logueado como el usuario nuevo. Se verificó con
+  una prueba explícita que la sesión del admin no cambia tras crear un
+  usuario.
+- Sigue llamando a `send_welcome_email(self.object)` — el correo de
+  bienvenida no depende de quién creó la cuenta.
+
+**[security/forms.py](security/forms.py)** — `UserRegisterForm` se renombró
+a `UserCreateForm` (ya no es de "registro", es de "creación" por el admin);
+el formulario en sí no cambió.
+
+**[security/urls.py](security/urls.py)** — se quitó `register/` y se agregó
+`users/create/` (`user_create`), agrupada junto a `user_list`/`user_update`/
+`user_delete` en vez de junto a login/logout, porque ahora es una operación
+de gestión de usuarios, no de autenticación.
+
+**Plantillas:**
+- `security/register.html` se eliminó — `UserCreateView` reutiliza
+  [security/user_form.html](security/templates/security/user_form.html)
+  (el mismo que ya usaba `UserUpdateView`), genericizado con una variable
+  `{{ title }}` (vía `extra_context`) para mostrar "Create User" o "Edit
+  User" según corresponda, en vez de duplicar el formulario en dos
+  archivos casi idénticos.
+- [security/user_list.html](security/templates/security/user_list.html) —
+  se agregó el botón **"+ New User"** (antes no existía ninguna forma de
+  crear un usuario desde la lista, porque se dependía del registro
+  público).
+- [billing/templates/billing/base.html](billing/templates/billing/base.html)
+  — se quitó el link "Sign Up" del navbar para anónimos.
+- [templates/registration/login.html](templates/registration/login.html) —
+  se cambió "¿No tienes cuenta? Regístrate" por un texto que indica que hay
+  que pedírsela al Administrador.
+
+## Verificación
+
+Se probaron los 4 casos relevantes con `Client()` de Django (no solo que
+compile):
+1. `/security/register/` y `/signup/` devuelven **404** (ya no existen).
+2. Un visitante anónimo que intenta `/security/users/create/` es
+   redirigido a login.
+3. Un usuario logueado **sin** rol Administrador (probado con "Vendedor")
+   es redirigido — no puede crear usuarios.
+4. Un Administrador sí puede: el usuario se crea con el rol correcto, le
+   llega el correo de bienvenida, **la sesión del admin no cambia**
+   (verificado comparando el `_auth_user_id` de la sesión antes y después),
+   y redirige a la lista de usuarios.

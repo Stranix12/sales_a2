@@ -4,7 +4,6 @@ app_name = 'billing'
 urlpatterns = [
 # Home (Dashboard)
 path('', views.home, name='home'),
-path('signup/', views.SignUpView.as_view(), name='signup'),
 # Brand (lista CBV + create/update/delete FBV)
 path('brands/', views.BrandListView.as_view(), name='brand_list'),
 path('brands/create/', views.brand_create, name='brand_create'),

@@ -1,7 +1,10 @@
 {% extends 'billing/base.html' %}
 {% block title %}Users{% endblock %}
 {% block content %}
-<h2>Users</h2>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0">Users</h2>
+  <a href="{% url 'security:user_create' %}" class="btn btn-primary">+ New User</a>
+</div>
 <table class="table table-striped table-hover">
   <thead class="table-dark">
     <tr>

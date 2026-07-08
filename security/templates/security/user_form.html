@@ -1,9 +1,9 @@
 {% extends 'billing/base.html' %}
-{% block title %}Edit User{% endblock %}
+{% block title %}{{ title|default:'Edit User' }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-6">
-    <h2>Edit User</h2>
+    <h2>{{ title|default:'Edit User' }}</h2>
     <form method="post">
       {% csrf_token %}
       {{ form.as_p }}

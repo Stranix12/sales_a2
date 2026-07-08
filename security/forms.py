@@ -2,9 +2,10 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User, Group, Permission
 
-# === 1. REGISTRO DE USUARIO CON ROL ===
-class UserRegisterForm(UserCreationForm):
-    """Registro público: el usuario elige su rol al registrarse."""
+# === 1. CREACIÓN DE USUARIO CON ROL (solo Administrador) ===
+class UserCreateForm(UserCreationForm):
+    """El Administrador crea la cuenta y le asigna un rol. No hay
+    autorregistro público: por eso esta vista está protegida en views.py."""
     email = forms.EmailField(required=True)
     role = forms.ModelChoiceField(
         queryset=Group.objects.all(),
