@@ -6,6 +6,57 @@ búsqueda por columna, paginación y exportación a **PDF/Excel** mediante un mi
 
 ---
 
+## Estado actual del proyecto (leer esto primero)
+
+Para orientarse rápido sin tener que leer todo el documento. El resto del
+README está organizado **cronológicamente por feature**, cada uno con su
+"por qué" — esta sección es solo el resumen ejecutivo.
+
+**Desplegado y funcionando en producción:**
+- App en Render: `https://sales-a2.onrender.com` (Blueprint: `render.yaml`,
+  repo: `https://github.com/Stranix12/sales_a2`)
+- Base de datos: **PostgreSQL** (local: contenedor Docker `sales_postgres`;
+  producción: addon de Postgres de Render, conectado vía `DATABASE_URL`)
+- Correo transaccional real vía **Brevo** (API HTTP, no SMTP — ver por qué
+  en "Envío de Correos" más abajo), a un correo real, confirmado funcionando
+- Roles y permisos: consola de un panel (`security/group_console.html`)
+- Registro de usuarios: **solo el Administrador** puede crear cuentas,
+  con contraseña automática opcional + obligación de cambiarla al primer login
+- Exportación PDF/Excel: listados (`billing`, mixin genérico) y compras
+  individuales (`purchasing/exports.py`)
+
+**Pendiente / no empezado todavía** (visto en conversaciones pero sin código):
+- **Facturación Electrónica** (Ecuador, sin conexión real al SRI): agregar
+  `payment_status`/`payment_date`/`payment_method`/`numero_factura` a
+  `Invoice`, campos `cedula_ruc`/`direccion` a `Customer`, modelos nuevos
+  `ElectronicReceipt` y `PaymentLog`, vista "Marcar como Pagado", generar
+  PDF de factura (reutilizar el patrón de `purchasing/exports.py`) y
+  enviarlo por correo al pagar.
+- **PayPal** (bonus/puntos extra): se conectaría al flujo de "Marcar como
+  Pagado" de arriba.
+- Cargar datos de prueba reales (productos/clientes) — la base quedó vacía
+  tras la migración a Postgres.
+
+**Gotchas / cosas raras que le pasaron a este proyecto** (por si se repiten):
+- **Dos copias del proyecto en el disco**: `C:\Users\Davis\Documents\sales_a2`
+  (venv viejo) y `C:\Users\Davis\Pictures\sales_a2` (el real, donde se
+  trabaja). Si un `python manage.py runserver` falla con
+  `ModuleNotFoundError` mencionando rutas de `Documents\...`, es que el
+  venv activo es el equivocado. Solución más confiable: ejecutar con la
+  ruta completa, `C:\Users\Davis\Pictures\sales_a2\ent_sales_a2\Scripts\python.exe manage.py runserver`,
+  en vez de depender de `activate`.
+- El venv (`ent_sales_a2`) fue copiado/movido de ruta alguna vez: instalar
+  paquetes con `python -m pip install ...`, **no** con `pip.exe` directo
+  (puede apuntar a la ruta vieja).
+- **Render bloquea SMTP saliente** (puerto 587/465) — por eso el envío de
+  correos en producción usa la API HTTP de Brevo (`django-anymail`), no
+  `smtplib`. Ver la sección "Envío de Correos" para el detalle completo.
+- El plan **free de Render no incluye Shell interactivo** — el superusuario
+  se crea automáticamente en cada build vía variables de entorno
+  (`DJANGO_SUPERUSER_*`), no a mano.
+
+---
+
 ## 1. Búsqueda por columna
 
 Se añadió un panel de filtros sobre el listado de productos, con un control adecuado
@@ -524,6 +575,77 @@ python manage.py setup_roles       # Administrador, Vendedor, Analista de Compra
 
 ---
 
+# Despliegue en Render
+
+**Objetivo:** publicar el proyecto en `https://sales-a2.onrender.com` desde
+el repo de GitHub (`https://github.com/Stranix12/sales_a2`), con
+PostgreSQL real (no la de Docker local) y correo real (no consola).
+
+## El Blueprint (`render.yaml`)
+
+En vez de crear el Web Service y la base de datos a mano en el dashboard,
+[render.yaml](render.yaml) los declara juntos — Render los lee al conectar
+el repo (**New → Blueprint Instance**) y los crea/conecta solos:
+
+```yaml
+databases:
+  - name: sales-a2-db          # crea el Postgres administrado de Render
+    databaseName: sales_a2
+    user: django_user
+    plan: free
+
+services:
+  - type: web
+    name: sales-a2
+    env: python
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py setup_roles && (python manage.py createsuperuser --noinput || true)"
+    startCommand: "gunicorn config.wsgi:application"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: {name: sales-a2-db, property: connectionString}  # conecta sola la BD de arriba
+      - key: SECRET_KEY
+        generateValue: true       # Render genera uno real, no el de desarrollo
+      - key: DEBUG
+        value: "False"
+      # BREVO_API_KEY, DEFAULT_FROM_EMAIL, DJANGO_SUPERUSER_* : sync: false
+      # (secretos — Render los pide al aplicar el Blueprint, no viven en el yaml)
+```
+
+## Por qué el superusuario se crea en el `buildCommand`, no a mano
+
+El plan **free de Render no incluye Shell interactivo** (es función de
+pago). La alternativa: Django's `createsuperuser --noinput` ya sabe leer
+`DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` de variables de
+entorno. Se agregó al `buildCommand`, que sí corre gratis en cada deploy.
+
+Problema: en el **segundo** deploy en adelante, el usuario ya existe y el
+comando falla (`CommandError: ... already taken`), lo que tumbaría *todo*
+el build. Por eso va envuelto así: `(python manage.py createsuperuser --noinput || true)`
+— el paréntesis limita el `|| true` a *solo* ese comando (si `pip install`
+o `migrate` fallan, el build sí debe fallar de verdad; solo el "ya existe"
+de `createsuperuser` se ignora). Se probó explícitamente corriendo el
+comando dos veces seguidas en local: la 1ª crea el usuario, la 2ª falla
+con exit code 1 tal como se esperaba.
+
+`setup_roles` va antes que `createsuperuser` en la misma cadena porque ya
+es idempotente (`get_or_create` en
+[security/management/commands/setup_roles.py](security/management/commands/setup_roles.py)),
+así que no necesita ningún truco para poder correr en cada build.
+
+## Variables de entorno que hay que llenar a mano en el dashboard
+
+Las marcadas `sync: false` en el yaml no tienen valor por defecto —
+Render las pide como texto en blanco al aplicar el Blueprint, o se
+agregan después en **Environment**:
+
+| Variable | De dónde sale |
+|---|---|
+| `BREVO_API_KEY` | Brevo → SMTP & API → pestaña **API Keys** (no la de SMTP) |
+| `DEFAULT_FROM_EMAIL` | Un remitente **verificado** en Brevo → Senders (formato `Nombre <correo@dominio.com>`) |
+| `DJANGO_SUPERUSER_USERNAME` / `_EMAIL` / `_PASSWORD` | Los que se quieran para el admin de producción |
+
+---
+
 # Envío de Correos (bienvenida + factura)
 
 **Objetivo:** enviar un correo automático en dos momentos: (1) cuando se
@@ -545,8 +667,11 @@ registra un usuario, y (2) cuando se crea una factura de cliente.
 
 **Nuevo:** [shared/emails.py](shared/emails.py)
 
-- `send_welcome_email(user)` — arma el correo con el rol asignado
-  (`user.groups.all()`) y lo envía a `user.email`.
+- `send_welcome_email(user, temp_password=None, login_url=None)` — arma el
+  correo con el rol asignado (`user.groups.all()`) y lo envía a
+  `user.email`. Los parámetros `temp_password`/`login_url` se agregaron
+  después, cuando se implementó la contraseña temporal — ver la sección
+  "Contraseña temporal al crear usuario" más abajo para el detalle completo.
 - `send_invoice_email(invoice)` — arma el correo con las líneas de la
   factura (`invoice.details.select_related('product')`) y los totales, lo
   envía a `invoice.customer.email`.
@@ -565,8 +690,10 @@ guarda en memoria el `Decimal` con más de 2 decimales
 vuelve a leer de la base de datos.
 
 **Modificado:**
-- [security/views.py](security/views.py) — `RegisterView.form_valid()`
-  llama a `send_welcome_email(self.object)` justo después de `login()`.
+- [security/views.py](security/views.py) — `UserCreateView.form_valid()`
+  llama a `send_welcome_email(...)` después de guardar (originalmente esto
+  vivía en `RegisterView`, la vista de autorregistro pública que ya no
+  existe — ver "Registro restringido" más abajo).
 - [billing/views.py](billing/views.py) — `invoice_create` llama a
   `send_invoice_email(invoice)` justo después de guardar los totales
   finales, antes del `messages.success(...)` y el `redirect`.
@@ -579,18 +706,53 @@ DEFAULT_FROM_EMAIL = 'Sales System <noreply@salessystem.local>'
 ```
 
 En desarrollo los correos se **imprimen en la terminal** donde corre
-`runserver` (no hace falta SMTP real para probar el flujo). Para producción
-(Render), cambiar a SMTP real, por ejemplo con Gmail y variables de entorno:
+`runserver` (no hace falta SMTP real para probar el flujo).
+
+## Producción: Brevo por API HTTP, no por SMTP (y no Gmail)
+
+La primera versión de este proyecto planeaba usar SMTP real en producción
+(Gmail, o Brevo por SMTP) — **ninguna de las dos funcionó**, por dos
+motivos completamente distintos, en este orden:
+
+1. **Gmail rechazó las contraseñas de aplicación** en la cuenta usada para
+   pruebas (`"La opción de configuración que buscas no está disponible
+   para tu cuenta"` al entrar a myaccount.google.com/apppasswords) — pasa
+   en cuentas nuevas o sin la verificación en 2 pasos activada. Se cambió
+   a Brevo (300 correos/día gratis, sin ese requisito).
+2. **Render bloquea las conexiones salientes por SMTP** (puertos 587/465).
+   Con Brevo por SMTP, el correo se veía "enviado" en la app (sin error),
+   pero Brevo nunca recibía nada — el log de Render mostraba
+   `[CRITICAL] WORKER TIMEOUT` y el proceso de Gunicorn moría a medio
+   enviar: `smtplib` se quedaba colgado en `socket.connect()` esperando
+   una conexión que Render nunca dejaba completarse, hasta que Gunicorn
+   mataba el worker por timeout (30s). No fallaba rápido con un error
+   claro — se colgaba, lo cual es la señal típica de un puerto bloqueado
+   por firewall (el paquete SYN se descarta en silencio).
+
+**La solución fue evitar el puerto SMTP por completo**, no alargar el
+timeout: Brevo también ofrece una **API HTTP** (`api.brevo.com`, puerto
+443 — el mismo que usa cualquier navegador, nunca bloqueado). Se instaló
+[`django-anymail`](https://github.com/anymail/django-anymail) (lo estándar
+en Django para mandar correo por la API de un proveedor en vez de SMTP):
 
 ```python
+# config/settings.py
 if not DEBUG:
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = 'smtp.gmail.com'
-    EMAIL_PORT = 587
-    EMAIL_USE_TLS = True
-    EMAIL_HOST_USER = os.environ['EMAIL_USER']
-    EMAIL_HOST_PASSWORD = os.environ['EMAIL_PASSWORD']  # contraseña de aplicación de Gmail
+    EMAIL_BACKEND = 'anymail.backends.brevo.EmailBackend'
+    ANYMAIL = {'BREVO_API_KEY': os.environ.get('BREVO_API_KEY', '')}
 ```
+
+Se verificó en local que, con una API key inválida a propósito, el fallo
+es **inmediato** (0.7 segundos, con el error real `401 Unauthorized: Key
+not found` devuelto por Brevo) en vez de colgarse — confirma que el
+problema original era específicamente el puerto SMTP, no la lógica de
+`shared/emails.py` (que no cambió: `send_mail()` de Django funciona igual
+sin importar qué backend esté configurado).
+
+**Además hace falta un remitente verificado en Brevo** (Senders, Domains &
+Dedicated IPs → Senders): usar `noreply@algo-inventado.com` como
+`DEFAULT_FROM_EMAIL` lo rechaza. Tiene que ser un correo real que se
+pueda verificar ahí (ej. `Sales System <tucorreo@gmail.com>`).
 
 ## Por qué no *signals*
 
@@ -798,3 +960,60 @@ Probado end-to-end con `Client()` de Django (no solo que compile):
 4. Contraseña manual débil (`"123"`) es rechazada (Django sí valida en
    este camino); una manual válida se acepta con su propio valor exacto
    (no con la fórmula automática), y también exige cambio en el primer login.
+
+## Ajuste 1: link de login en el correo
+
+El correo de bienvenida decía "inicia sesión" pero no daba ningún link
+para hacerlo. Se agregó uno absoluto, construido en la vista (no en
+`shared/emails.py`, que no tiene acceso al `request`):
+
+```python
+# security/views.py — UserCreateView.form_valid()
+login_url = self.request.build_absolute_uri(reverse('login'))
+send_welcome_email(self.object, temp_password=temp_password, login_url=login_url)
+```
+
+`build_absolute_uri()` arma la URL completa (`http://127.0.0.1:8000/...`
+en local, `https://sales-a2.onrender.com/...` en producción) usando el
+dominio real de la request — funciona igual en ambos entornos sin
+hardcodear ningún dominio. En Render, como `SECURE_PROXY_SSL_HEADER` ya
+estaba configurado (ver sección de HTTPS en "Despliegue en Render" — en
+realidad vive en la sección de PostgreSQL/settings de más arriba, junto a
+`SECURE_SSL_REDIRECT`), la URL sale con `https://` correctamente aunque
+Render hable con Gunicorn por HTTP puertas adentro.
+
+## Ajuste 2: ocultar el navbar mientras falta cambiar la contraseña
+
+`ForcePasswordChangeMiddleware` ya bloqueaba **entrar** a cualquier otra
+página, pero [billing/templates/billing/base.html](billing/templates/billing/base.html)
+seguía dibujando el navbar completo (Brands, Customers, Security, todo)
+según el rol del usuario — confuso, porque cada link ahí simplemente
+rebotaba de vuelta a la pantalla de cambio de contraseña.
+
+Se envolvió **todo** el bloque de links autenticados (no cada uno por
+separado) en una sola condición:
+
+```django
+{% if user.is_authenticated %}
+  {% if user.security_profile.must_change_password %}
+    <li class="nav-item"><span class="nav-link text-warning">Debes cambiar tu contraseña para continuar</span></li>
+  {% else %}
+    {# ... todos los links de siempre, sin cambios ... #}
+  {% endif %}
+{% endif %}
+```
+
+`user.security_profile` es un `OneToOneField` inverso — si el usuario no
+tiene `UserSecurityProfile` (todos los usuarios creados antes de esta
+feature, como `admin_dav`), Django lanza `RelatedObjectDoesNotExist`, pero
+esa excepción hereda de `AttributeError` a propósito (para que
+`{% if %}` en templates la trate como "no existe" en vez de reventar) —
+por eso no hizo falta ningún `{% if %}` extra para usuarios viejos, el
+navbar simplemente se muestra normal para ellos.
+
+Probado con tres escenarios reales (`Client()` de Django): usuario sin
+perfil ve el navbar completo (retrocompatible), usuario con
+`must_change_password=True` no ve **ningún** link (solo el aviso), y ese
+mismo usuario, tras cambiar la contraseña, vuelve a ver el navbar según su
+rol real (probado con "Vendedor": ve Customers/Invoices, no ve
+Brands/Security).
