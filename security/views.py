@@ -67,7 +67,8 @@ class UserCreateView(AdminOnlyMixin, CreateView):
             user=self.object, defaults={'must_change_password': True}
         )
         temp_password = form.cleaned_data.get('password1')
-        send_welcome_email(self.object, temp_password=temp_password)
+        login_url = self.request.build_absolute_uri(reverse('login'))
+        send_welcome_email(self.object, temp_password=temp_password, login_url=login_url)
         messages.success(self.request, f'Usuario "{self.object.username}" creado.')
         return response
 

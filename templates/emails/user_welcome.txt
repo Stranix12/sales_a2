@@ -8,8 +8,11 @@ Tu cuenta en Sales System fue creada exitosamente.
   Contraseña temporal: {{ temp_password }}
 
 Por seguridad, el sistema te pedirá cambiarla la primera vez que inicies sesión.
-{% endif %}
+{% endif %}{% if login_url %}
+Inicia sesión y cambia tu contraseña aquí:
+{{ login_url }}
+{% else %}
 Ya puedes iniciar sesión en el sistema con tus credenciales.
-
+{% endif %}
 Saludos,
 Sales System

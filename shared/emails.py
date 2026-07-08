@@ -16,12 +16,15 @@ from django.template.loader import render_to_string
 logger = logging.getLogger('emails')
 
 
-def send_welcome_email(user, temp_password=None):
+def send_welcome_email(user, temp_password=None, login_url=None):
     """Correo de bienvenida al crear un usuario.
 
     Si `temp_password` viene con valor (la contraseña que el Administrador
     le asignó, automática o manual), se incluye en el correo junto con el
     aviso de que el sistema la va a obligar a cambiarla en su primer login.
+    `login_url` es la URL absoluta de login (la arma la vista con
+    request.build_absolute_uri, porque desde aquí no hay request); al
+    entrar ahí, ForcePasswordChangeMiddleware ya lo manda solo a cambiarla.
     """
     if not user.email:
         logger.warning('Usuario "%s" sin email: no se envía correo de bienvenida.', user.username)
@@ -29,7 +32,7 @@ def send_welcome_email(user, temp_password=None):
 
     roles = ', '.join(g.name for g in user.groups.all()) or 'Sin rol asignado'
     body = render_to_string('emails/user_welcome.txt', {
-        'user': user, 'roles': roles, 'temp_password': temp_password,
+        'user': user, 'roles': roles, 'temp_password': temp_password, 'login_url': login_url,
     })
     try:
         send_mail(
