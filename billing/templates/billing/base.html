@@ -80,7 +80,7 @@
   </div>
 </nav>
 <!-- Contenido principal -->
-<div class="container mt-4">
+<div class="{% block container_class %}container{% endblock %} mt-4">
   {% if messages %}
     {% for m in messages %}
     <div class="alert alert-{{ m.tags }} alert-dismissible fade show">
