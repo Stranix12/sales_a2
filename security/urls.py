@@ -7,6 +7,7 @@ urlpatterns = [
     # Autenticación
     path('login/', views.SecurityLoginView.as_view(), name='login'),
     path('logout/', views.SecurityLogoutView.as_view(), name='logout'),
+    path('force-password-change/', views.ForcePasswordChangeView.as_view(), name='force_password_change'),
 
     # Usuarios (solo Administrador: no hay registro público)
     path('users/', views.UserListView.as_view(), name='user_list'),

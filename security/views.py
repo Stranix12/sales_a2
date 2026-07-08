@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User, Group, Permission
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
 from django.db.models import Count
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
@@ -11,6 +11,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from shared.emails import send_welcome_email
 from shared.mixins import GroupRequiredMixin
 from .forms import UserCreateForm, UserUpdateForm, GroupForm, PermissionForm
+from .models import UserSecurityProfile
 
 # === MIXIN BASE: SOLO ADMINISTRADOR ===
 class AdminOnlyMixin(LoginRequiredMixin, GroupRequiredMixin):
@@ -26,6 +27,21 @@ class SecurityLoginView(LoginView):
 class SecurityLogoutView(LogoutView):
     """Logout con CBV. Redirige según LOGOUT_REDIRECT_URL."""
     pass
+
+class ForcePasswordChangeView(PasswordChangeView):
+    """A donde ForcePasswordChangeMiddleware redirige a un usuario con
+    contraseña temporal pendiente de cambiar. PasswordChangeView ya exige
+    login por su cuenta (login_required en su dispatch)."""
+    template_name = 'security/force_password_change.html'
+    success_url = reverse_lazy('billing:home')
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        UserSecurityProfile.objects.filter(user=self.request.user).update(
+            must_change_password=False
+        )
+        messages.success(self.request, 'Contraseña actualizada correctamente.')
+        return response
 
 # === USUARIOS (solo Administrador) ===
 class UserListView(AdminOnlyMixin, ListView):
@@ -45,7 +61,13 @@ class UserCreateView(AdminOnlyMixin, CreateView):
         # A propósito NO se llama a login() aquí: quien crea la cuenta es el
         # Administrador, no debe iniciar sesión como el usuario nuevo.
         response = super().form_valid(form)
-        send_welcome_email(self.object)
+        # La contraseña (automática o manual) es asignada por el admin, no
+        # elegida por el propio usuario: se le exige cambiarla al primer login.
+        UserSecurityProfile.objects.update_or_create(
+            user=self.object, defaults={'must_change_password': True}
+        )
+        temp_password = form.cleaned_data.get('password1')
+        send_welcome_email(self.object, temp_password=temp_password)
         messages.success(self.request, f'Usuario "{self.object.username}" creado.')
         return response
 

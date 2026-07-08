@@ -16,14 +16,21 @@ from django.template.loader import render_to_string
 logger = logging.getLogger('emails')
 
 
-def send_welcome_email(user):
-    """Correo de bienvenida al crear un usuario (autorregistro o admin)."""
+def send_welcome_email(user, temp_password=None):
+    """Correo de bienvenida al crear un usuario.
+
+    Si `temp_password` viene con valor (la contraseña que el Administrador
+    le asignó, automática o manual), se incluye en el correo junto con el
+    aviso de que el sistema la va a obligar a cambiarla en su primer login.
+    """
     if not user.email:
         logger.warning('Usuario "%s" sin email: no se envía correo de bienvenida.', user.username)
         return False
 
     roles = ', '.join(g.name for g in user.groups.all()) or 'Sin rol asignado'
-    body = render_to_string('emails/user_welcome.txt', {'user': user, 'roles': roles})
+    body = render_to_string('emails/user_welcome.txt', {
+        'user': user, 'roles': roles, 'temp_password': temp_password,
+    })
     try:
         send_mail(
             subject='Bienvenido a Sales System',

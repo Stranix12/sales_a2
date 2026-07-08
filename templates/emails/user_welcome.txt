@@ -4,7 +4,11 @@ Tu cuenta en Sales System fue creada exitosamente.
 
   Usuario:       {{ user.username }}
   Rol asignado:  {{ roles }}
+{% if temp_password %}
+  Contraseña temporal: {{ temp_password }}
 
+Por seguridad, el sistema te pedirá cambiarla la primera vez que inicies sesión.
+{% endif %}
 Ya puedes iniciar sesión en el sistema con tus credenciales.
 
 Saludos,

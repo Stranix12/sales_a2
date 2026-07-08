@@ -12,4 +12,24 @@
     </form>
   </div>
 </div>
+<script>
+(function () {
+  // Solo aplica en el formulario de creación (Edit User no tiene este campo).
+  var autoCheckbox = document.getElementById('id_auto_password');
+  var pass1 = document.getElementById('id_password1');
+  var pass2 = document.getElementById('id_password2');
+  if (!autoCheckbox || !pass1 || !pass2) return;
+
+  function sync() {
+    var auto = autoCheckbox.checked;
+    [pass1, pass2].forEach(function (el) {
+      el.disabled = auto;
+      var wrapper = el.closest('p') || el.parentElement;
+      wrapper.style.display = auto ? 'none' : '';
+    });
+  }
+  autoCheckbox.addEventListener('change', sync);
+  sync();
+})();
+</script>
 {% endblock %}

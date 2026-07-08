@@ -697,3 +697,104 @@ compile):
    llega el correo de bienvenida, **la sesión del admin no cambia**
    (verificado comparando el `_auth_user_id` de la sesión antes y después),
    y redirige a la lista de usuarios.
+
+---
+
+# Contraseña temporal al crear usuario (obligación de cambiarla)
+
+**Objetivo:** cuando el Administrador crea una cuenta, puede elegir entre
+escribir la contraseña él mismo o dejar que el sistema genere una
+automática y fácil de recordar. En ambos casos, la contraseña la eligió
+alguien que no es el dueño de la cuenta — así que el sistema obliga a
+cambiarla la primera vez que esa persona inicia sesión, antes de dejarla
+usar cualquier otra pantalla.
+
+## La fórmula de la contraseña automática
+
+Inicial del primer nombre + primer apellido completo + inicial del segundo
+apellido, todo en minúsculas:
+
+```
+Davis Steven / Yanez Gualpa  →  d + yanez + g  →  "dyanezg"
+```
+
+Implementada en `generate_temp_password()` en
+[security/forms.py](security/forms.py). Normaliza tildes/ñ (con
+`unicodedata`) para que la contraseña no tenga caracteres raros.
+
+## Por qué no pasa por el validador de fortaleza de Django
+
+Django ya trae `AUTH_PASSWORD_VALIDATORS` (longitud mínima, no parecerse al
+usuario, etc.) — y una contraseña como `"dyanezg"` los reprueba **todos**
+a propósito (es corta y se parece al nombre). Eso es exactamente lo que se
+pidió ("fácil"), así que en vez de bajar los estándares de seguridad para
+*todas* las contraseñas del sistema, `UserCreateForm._post_clean()` se
+salta esa validación **únicamente** cuando se usó la automática:
+
+```python
+def _post_clean(self):
+    if self.cleaned_data.get('auto_password'):
+        forms.ModelForm._post_clean(self)  # construye el modelo, sin validar fortaleza
+    else:
+        super()._post_clean()  # UserCreationForm: sí valida fortaleza
+```
+
+Si el admin escribe la contraseña a mano (checkbox destildado), sigue
+pasando por la validación normal de Django — se probó explícitamente que
+una contraseña manual débil (`"123"`) es rechazada, mientras que la
+automática con ese mismo nivel de "debilidad" se acepta a propósito.
+
+## Cómo se implementó el "debe cambiarla en el primer login"
+
+Django no trae esto de fábrica — se necesitó una bandera persistida y algo
+que la revise en cada request:
+
+**[security/models.py](security/models.py)** (nuevo, la app `security` no
+tenía modelos propios hasta ahora) — `UserSecurityProfile`, `OneToOne` con
+`User`, con un solo campo: `must_change_password`.
+
+**[security/middleware.py](security/middleware.py)** (nuevo) —
+`ForcePasswordChangeMiddleware`: en cada request, si el usuario logueado
+tiene `must_change_password=True`, lo redirige a
+`security:force_password_change` sin importar a dónde intentaba ir
+(excepto a esa misma página y a logout, para no dejarlo atrapado sin
+salida). Registrado en `MIDDLEWARE` justo después de
+`AuthenticationMiddleware` (necesita `request.user`, que ese middleware ya
+resolvió) — [config/settings.py](config/settings.py).
+
+**[security/views.py](security/views.py)**:
+- `UserCreateView.form_valid()` ahora, después de guardar el usuario,
+  hace `UserSecurityProfile.objects.update_or_create(user=..., must_change_password=True)`
+  y pasa la contraseña usada (`form.cleaned_data['password1']`, automática
+  o manual) a `send_welcome_email()`.
+- `ForcePasswordChangeView` — extiende el `PasswordChangeView` que ya trae
+  Django (pide la contraseña actual + la nueva dos veces, con la misma
+  validación de fortaleza de siempre). Al guardar, apaga
+  `must_change_password` para que el middleware deje de interceptarlo.
+
+**[shared/emails.py](shared/emails.py)** — `send_welcome_email()` ahora
+acepta un `temp_password` opcional; si viene, el correo
+([templates/emails/user_welcome.txt](templates/emails/user_welcome.txt))
+muestra la contraseña y el aviso de que hay que cambiarla al entrar.
+
+**[security/templates/security/user_form.html](security/templates/security/user_form.html)**
+— un poco de JS oculta los campos de contraseña manual cuando se marca
+"Generar automáticamente" (mejora de UX; si el navegador no ejecuta el JS,
+el formulario igual funciona server-side porque `clean()` sobrescribe
+`password1`/`password2` cuando `auto_password` está marcado).
+
+## Verificación
+
+Probado end-to-end con `Client()` de Django (no solo que compile):
+1. La fórmula genera exactamente `"dyanezg"` para el ejemplo dado, y maneja
+   nombres con un solo apellido y con tildes/ñ.
+2. Crear un usuario con contraseña automática: la contraseña real
+   (`check_password('dyanezg')`) funciona, el correo la incluye, y queda
+   `must_change_password=True`.
+3. Ese usuario, al loguearse e intentar ir a **cualquier** URL (`/`,
+   `/products/`), es redirigido siempre a la pantalla de cambio de
+   contraseña — hasta que la cambia, después de lo cual navega con
+   normalidad y `must_change_password` pasa a `False`.
+4. Contraseña manual débil (`"123"`) es rechazada (Django sí valida en
+   este camino); una manual válida se acepta con su propio valor exacto
+   (no con la fórmula automática), y también exige cambio en el primer login.
