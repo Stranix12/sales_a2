@@ -1,24 +1,103 @@
 {% extends 'billing/base.html' %}
 {% block title %}Permissions{% endblock %}
+{% block extra_head %}
+<style>
+  .perm-toolbar { position: relative; max-width: 400px; margin-bottom: 18px; }
+  .perm-toolbar i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-mut); font-size: 13px; }
+  .perm-toolbar input { padding-left: 34px; }
+
+  .perm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .perm-card {
+    background: var(--surface); border: 1px solid var(--line-2); border-radius: 16px;
+    box-shadow: var(--sh-sm); overflow: hidden; transition: box-shadow .18s ease, transform .18s ease;
+  }
+  .perm-card:hover { box-shadow: var(--sh); transform: translateY(-2px); }
+  .perm-card-head { display: flex; align-items: center; gap: 12px; padding: 13px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line-2); }
+  .perm-badge {
+    width: 36px; height: 36px; border-radius: 10px; flex: 0 0 auto; font-weight: 700;
+    background: var(--c-primary-050); color: var(--c-primary-600); display: flex; align-items: center; justify-content: center;
+  }
+  .perm-card-name { font-weight: 700; line-height: 1.1; }
+  .perm-card-code { font-family: Consolas, monospace; font-size: 11px; color: var(--ink-mut); }
+  .perm-card-count {
+    margin-left: auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: 999px;
+    padding: 2px 11px; font-size: 12px; font-weight: 700; color: var(--ink-mut); flex: 0 0 auto;
+  }
+  .perm-list { list-style: none; margin: 0; padding: 7px; }
+  .perm-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; }
+  .perm-item:hover { background: var(--surface-2); }
+  .perm-item .act { font-weight: 600; font-size: .9rem; }
+  .perm-item .cn { font-family: Consolas, monospace; font-size: 10.5px; color: var(--ink-mut); }
+  .perm-item .perm-item-actions { margin-left: auto; display: flex; gap: .25rem; flex: 0 0 auto; }
+  .perm-empty { display: none; }
+  .perm-empty.show { display: block; }
+</style>
+{% endblock %}
 {% block content %}
-<h2>Permissions</h2>
-<a href="{% url 'security:permission_create' %}" class="btn btn-primary mb-3">+ New Permission</a>
-<table class="table table-striped table-hover">
-  <thead class="table-dark">
-    <tr><th>Name</th><th>Codename</th><th>Model</th><th>Actions</th></tr>
-  </thead>
-  <tbody>
-    {% for p in items %}
-    <tr>
-      <td>{{ p.name }}</td>
-      <td><code>{{ p.codename }}</code></td>
-      <td>{{ p.content_type.model }}</td>
-      <td>
-        <a href="{% url 'security:permission_update' p.pk %}" class="btn btn-sm btn-warning">Edit</a>
-        <a href="{% url 'security:permission_delete' p.pk %}" class="btn btn-sm btn-danger">Delete</a>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-key"></i></span>Permisos</h2>
+    <span class="count-chip"><i class="bi bi-hash"></i>{{ items|length }} permiso{{ items|length|pluralize:"s" }} · {{ permission_groups|length }} módulos</span>
+  </div>
+  <div class="page-head-actions">
+    <a href="{% url 'security:permission_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Nuevo permiso</a>
+  </div>
+</div>
+
+<div class="perm-toolbar">
+  <i class="bi bi-search"></i>
+  <input type="text" id="permSearch" class="form-control" placeholder="Buscar módulo (ej. producto, factura, usuario)…" aria-label="Buscar módulo">
+</div>
+
+<div class="perm-grid" id="permGrid">
+  {% for g in permission_groups %}
+  <div class="perm-card" data-search="{{ g.label|lower }} {{ g.code }}">
+    <div class="perm-card-head">
+      <span class="perm-badge">{{ g.label|first|upper }}</span>
+      <div class="min-w-0">
+        <div class="perm-card-name">{{ g.label }}</div>
+        <div class="perm-card-code">{{ g.code }}</div>
+      </div>
+      <span class="perm-card-count">{{ g.perms|length }}</span>
+    </div>
+    <ul class="perm-list">
+      {% for p in g.perms %}
+      <li class="perm-item">
+        <div class="min-w-0">
+          <div class="act">{{ p.name }}</div>
+          <div class="cn">{{ p.codename }}</div>
+        </div>
+        <span class="perm-item-actions">
+          <a href="{% url 'security:permission_update' p.pk %}" class="act-btn act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
+          <a href="{% url 'security:permission_delete' p.pk %}" class="act-btn act-del" title="Eliminar"><i class="bi bi-trash"></i></a>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% empty %}
+  <div class="empty-state"><i class="bi bi-key"></i>No hay permisos.</div>
+  {% endfor %}
+</div>
+
+<div class="empty-state perm-empty" id="permNoResults"><i class="bi bi-search"></i>Ningún módulo coincide con la búsqueda.</div>
+
+<script>
+(function () {
+  var input = document.getElementById('permSearch');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('#permGrid > .perm-card'));
+  var noResults = document.getElementById('permNoResults');
+  if (!input) return;
+  input.addEventListener('input', function () {
+    var q = this.value.trim().toLowerCase();
+    var visible = 0;
+    cards.forEach(function (card) {
+      var hay = (card.getAttribute('data-search') || '').indexOf(q) !== -1;
+      card.style.display = hay ? '' : 'none';
+      if (hay) visible++;
+    });
+    noResults.classList.toggle('show', visible === 0);
+  });
+})();
+</script>
 {% endblock %}

@@ -37,6 +37,15 @@ README está organizado **cronológicamente por feature**, cada uno con su
 - Cargar datos de prueba reales (productos/clientes) — la base quedó vacía
   tras la migración a Postgres.
 
+**Solo en local, todavía SIN subir a GitHub/Render** (a propósito, por
+instrucción del usuario — se subirá cuando haya más cambios):
+- **Rediseño visual completo**: se eliminó Bootstrap por completo y se
+  reemplazó por un **design system propio** (`billing/static/billing/app.css`
+  + `app.js`). Menú agrupado en desplegables (Compras / Ventas / Security),
+  notificaciones tipo *toast* animadas, y modales/dropdowns con JS vanilla
+  propio. Ver la sección "Rediseño: design system propio (sin Bootstrap)"
+  al final de este README.
+
 **Gotchas / cosas raras que le pasaron a este proyecto** (por si se repiten):
 - **Dos copias del proyecto en el disco**: `C:\Users\Davis\Documents\sales_a2`
   (venv viejo) y `C:\Users\Davis\Pictures\sales_a2` (el real, donde se
@@ -1017,3 +1026,283 @@ perfil ve el navbar completo (retrocompatible), usuario con
 mismo usuario, tras cambiar la contraseña, vuelve a ver el navbar según su
 rol real (probado con "Vendedor": ve Customers/Invoices, no ve
 Brands/Security).
+
+---
+
+# Ajuste 3: la consola de roles quedaba encajonada
+
+Reportado en producción (Render) con capturas reales: la consola de
+roles/permisos ([security/group_console.html](security/templates/security/group_console.html))
+se veía metida en un recuadro angosto en vez de ocupar la pantalla — dos
+problemas distintos, arreglados en dos pasos.
+
+## Problema 1: ancho fijo (Bootstrap `.container`)
+
+[billing/templates/billing/base.html](billing/templates/billing/base.html)
+envuelve **todo** el contenido de **todas** las páginas en un
+`<div class="container mt-4">` — Bootstrap limita `.container` a un ancho
+máximo (~1200-1300px) sin importar qué tan ancha sea la pantalla. Bien
+para formularios y tablas normales, mal para un panel de dos columnas
+pensado para usar el espacio disponible.
+
+**Arreglo:** se agregó un `{% block container_class %}container{% endblock %}`
+en `base.html` (por defecto sigue siendo `"container"`, así que **ninguna
+otra página cambia**), y `group_console.html` lo sobreescribe:
+
+```django
+{% block container_class %}container-fluid px-4{% endblock %}
+```
+
+Verificado que el resto de páginas (ej. `/purchases/`) siguen renderizando
+`class="container mt-4"` sin cambios.
+
+## Problema 2: hueco vertical enorme (número de píxeles adivinado)
+
+El primer intento de que la consola llenara el alto de la pantalla usó
+`height: calc(100vh - 185px)` — un número inventado a partir de una
+suposición de cuánto miden el navbar + el título. En la pantalla real del
+usuario esa suma no daba 185px, así que sobraba un hueco en blanco enorme
+debajo de la consola.
+
+**Arreglo:** flexbox real en vez de otro número adivinado. Se le agregó
+`id="page-content"` al div contenedor en `base.html` (inofensivo para
+las demás páginas), y en `group_console.html`:
+
+```css
+/* Todo esto scoped SOLO a esta página, vía :has(.rp-console) — el resto
+   de páginas no se entera de este cambio. */
+body:has(.rp-console) {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+body:has(.rp-console) > nav.navbar { flex: 0 0 auto; }
+body:has(.rp-console) > #page-content {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
+}
+.rp-console { flex: 1 1 auto; min-height: 460px; /* ...resto igual... */ }
+```
+
+Con esto, `.rp-console` siempre llena exactamente el espacio que sobra
+bajo el navbar y el título — cualquiera que sea, en cualquier pantalla —
+sin volver a depender de un cálculo en píxeles que se puede desincronizar
+apenas cambie el tamaño de fuente, el navbar, o el zoom del navegador.
+
+**Nota:** `:has()` es selector CSS relativamente nuevo pero con soporte
+universal en navegadores modernos (Chrome, Edge, Safari, Firefox) a esta
+fecha — no se agregó ningún fallback para navegadores muy viejos porque
+no aplica a este proyecto.
+
+Ambos arreglos (ancho y alto) ya están en GitHub/Render (commits
+`3e3329f` y `d5a7ee7`). Esta actualización del README en sí es solo local
+(a propósito, por instrucción explícita) — falta un `git push` de
+`README.md` cuando se quiera sincronizar el repo remoto con esta
+documentación.
+
+---
+
+# Rediseño: design system propio (sin Bootstrap)
+
+> **Estado:** hecho y probado **solo en local**. **No** está en GitHub ni
+> Render todavía (a propósito, por instrucción del usuario: "no subas ni al
+> git ni a render hasta hacer más cambios"). Cuando se quiera desplegar, hay
+> que hacer `git push` de los archivos nuevos/modificados listados abajo.
+
+El objetivo fue un aspecto más profesional y "de producto", no de plantilla
+Bootstrap genérica. Se hizo en tres pasos, en este orden.
+
+## Paso 1: tema global + navbar + notificaciones animadas
+
+Se creó un archivo CSS que se carga desde `base.html` y por lo tanto aplica a
+**todas** las páginas sin editar plantilla por plantilla. Aportó:
+
+- Paleta índigo (`#33459b`, la misma de la consola de roles, para que todo se
+  sienta un solo producto), fondo gris azulado, tarjetas con sombras suaves.
+- Navbar con logo (insignia), ícono por sección, **resaltado de la sección
+  activa** (píldora), y chip de usuario con avatar (inicial del username).
+- **Notificaciones tipo *toast***: los mensajes de Django (`messages`) ya no
+  son una alerta estática. Ahora entran deslizándose desde la derecha arriba,
+  muestran una barra de progreso y **se auto-descartan a los ~4.5 s** (hover
+  las pausa; hay una × para cerrarlas antes). El markup lo genera `base.html`
+  a partir de `messages`, el estilo y la animación están en el CSS, y el
+  cierre lo maneja el JS. **Esto responde al pedido del usuario** de que la
+  alerta de "se creó X correctamente" apareciera un momento y desapareciera
+  sola, con animación.
+
+> Nota: la duración es de **segundos**, no minutos. El usuario dijo "minutos"
+> pero el estándar UX es unos segundos; si se quiere más largo, es cambiar el
+> `4.5s` de `@keyframes toastBar` / `.app-toast-bar` en `app.css`.
+
+## Paso 2: menú agrupado por rol (Compras / Ventas / Security)
+
+El menú era una fila larga y plana (Home, Brands, Groups, Suppliers, Products,
+Purchases, Customers, Invoices, Security). Se agrupó en **desplegables**, y se
+eligió agrupar **por rol de negocio** (no por app de Django) para que coincida
+con el gating de permisos que ya existía:
+
+- **Compras** (Analista de Compras / Admin): Brands, Groups, Suppliers,
+  Products y —tras un separador— Purchases.
+- **Ventas** (Vendedor / Admin): Customers, Invoices.
+- **Security** (solo Admin): Users, Roles, Permissions.
+
+Cada `{% if user|has_group:... %}` que ya envolvía los links se conservó tal
+cual: un usuario solo ve los desplegables de su rol. Solo cambió la
+presentación (de `nav-link` sueltos a `dropdown-menu`).
+
+## Paso 3: eliminar Bootstrap por completo → framework propio
+
+Este fue el cambio grande. El usuario pidió "usa todo lo que sea necesario y
+mejor que bootstrap"; se eligió (con confirmación suya) un **design system
+propio en CSS**, en vez de Tailwind (que exigiría añadir Node/build al deploy
+de Render) o cambiar a otro framework genérico.
+
+**Archivos nuevos:**
+
+- **`billing/static/billing/app.css`** — un solo archivo, sin dependencias ni
+  build. Reimplementa, con estética propia, el subconjunto de Bootstrap que
+  las plantillas realmente usaban:
+  - *Tokens* (variables CSS): colores, escala de espaciado, radios, sombras,
+    tipografía (stack de sistema, sin fuentes externas).
+  - *Grid* propio de 12 columnas con breakpoints `sm/md/lg` y gutters
+    (`.row`, `.col-*`, `.g-*`) — mismo comportamiento que Bootstrap.
+  - *Utilidades* de flex, spacing (`m*/p*`), display, texto y color.
+  - *Componentes*: cards, botones (sólidos, outline, y las "tintas suaves" de
+    las acciones de tabla), badges, tablas, formularios (inputs, selects,
+    checks y **switches dibujados a mano en SVG** vía `background-image`),
+    paginación, breadcrumb, alertas, navbar, dropdowns, modales y toasts.
+- **`billing/static/billing/app.js`** — reemplaza el bundle JS de Bootstrap en
+  **JavaScript vanilla**, respetando **los mismos atributos `data-bs-*`** que
+  ya traían las plantillas (por eso no hubo que editar las ~30 plantillas):
+  desplegables, modales, menú hamburguesa móvil (`collapse`), cierre de
+  alertas, más los toasts y el resaltado de sección activa.
+
+**Cambios en `base.html`:** se quitaron los dos `<link>`/`<script>` del CDN de
+Bootstrap y se enlazó `app.css` + `app.js`. (Se mantiene el CDN de
+**bootstrap-icons** solo por los íconos `bi bi-*`; eso es una fuente de
+íconos, no el framework CSS.)
+
+**Clave del enfoque — por qué no se reescribieron las plantillas:** al
+conservar los nombres de clase (`card`, `btn btn-primary`, `row`, `col-md-3`,
+`table`, `badge`, `form-control`, …) y los atributos `data-bs-*`, solo cambió
+el *motor* visual por debajo. El HTML de las páginas quedó intacto, pero ahora
+el CSS es 100% propio y personalizable pixel a pixel.
+
+Se eliminó el `theme.css` del Paso 1: todo quedó consolidado en `app.css`.
+
+## Bugs del rediseño que se encontraron y arreglaron
+
+1. **Títulos invisibles en cabeceras oscuras.** La regla base
+   `h1..h6 { color: var(--ink) }` (oscuro) pisaba el `.text-white` heredado,
+   así que el `<h5>` "Campos visibles" del modal —y los títulos de las
+   tarjetas del Home con `bg-dark text-white`— salían texto oscuro sobre fondo
+   oscuro (invisibles). **Arreglo:** `h1..h6 { color: inherit }`, para que el
+   título tome el color del contexto (blanco dentro de `.bg-dark`/`.text-white`,
+   oscuro por defecto).
+
+2. **El modal "se quedaba opaco y no dejaba hacer nada".** Diagnóstico en dos
+   partes:
+   - La primera versión usaba un elemento `.modal-backdrop` separado por
+     **debajo** del contenedor `.modal` (transparente, `position:fixed;
+     inset:0`, z-index mayor). Ese contenedor transparente interceptaba los
+     clics, y el cierre "clic afuera" estaba puesto en el backdrop → nunca se
+     disparaba. Además el botón **Aplicar** del pie se cortaba en pantallas
+     bajas.
+   - **Arreglo (rediseño del modal):** se eliminó el backdrop aparte. Ahora
+     **el propio `.modal` es la capa oscura** (`background: rgba(...,.55)`,
+     `display:flex` para centrar el diálogo). El cierre "clic afuera" se
+     escucha en el contenedor y dispara solo si `e.target === modal` (igual
+     que hace Bootstrap). El `.modal-content` tiene
+     `max-height: calc(100vh - 3rem)` con cabecera/pie fijos
+     (`flex:0 0 auto`) y **cuerpo con scroll interno** (`flex:1 1 auto;
+     overflow-y:auto`), así el pie (Aplicar) **nunca** se corta.
+   - Cierre disponible por **×**, **clic en la zona oscura** o **Esc**.
+
+> **Caché del navegador:** al probar cambios de `app.js`/`app.css` en local,
+> usar **Ctrl+Shift+R** (recarga forzada). En una de las iteraciones el CSS
+> nuevo sí se cargó (el título ya se veía) pero el JS venía cacheado, dando la
+> impresión de que "seguía igual".
+
+## Archivos tocados en este rediseño (para el `git add` futuro)
+
+```
+billing/static/billing/app.css     (nuevo)
+billing/static/billing/app.js      (nuevo)
+billing/static/billing/theme.css   (creado y luego ELIMINADO)
+billing/templates/billing/base.html
+billing/templates/billing/home.html
+templates/registration/login.html
+```
+
+Las demás plantillas (listados, formularios, consola de roles) **no se
+tocaron**: siguen usando las mismas clases, ahora servidas por `app.css`.
+
+---
+
+# Rediseño (2): listados premium, dashboard con gráficas y Security
+
+> Continuación del rediseño anterior. Todo con el mismo design system propio
+> (`app.css` + `app.js`), sin dependencias nuevas.
+
+## Listados "premium"
+
+Los listados se sentían muy "estándar" (tabla rayada + barra de botones). Se
+elevó el patrón (por ahora en **Products**, y en **Users**/**Permissions** de
+Security) con clases nuevas en `app.css`:
+
+- **`.page-head`**: encabezado con ícono, título y un **chip de conteo**
+  ("N registros"), más una toolbar de acciones.
+- **`.filter-card`**: el panel de filtros como tarjeta limpia con cabecera.
+- **`.data-table`**: contenedor con encabezado oscuro, filas con hover, y
+  **acciones por fila como íconos** (`.act-btn` ver/editar/eliminar) que están
+  tenues y se resaltan al pasar el mouse por la fila.
+- **`.cell-thumb`** (miniatura) / **`.cell-avatar`** (avatar de iniciales para
+  entidades sin imagen, como usuarios), **`.status-pill`** (estado con punto),
+  y **`.empty-state`** (estado vacío con ícono).
+- **Navbar fija** (`position:sticky`) para dar feel de app al hacer scroll.
+
+## Dashboard con gráficas propias en SVG (sin librerías)
+
+Se descartó React y Chart.js a propósito (ver la nota sobre React más abajo).
+El dashboard (`home`) dibuja las gráficas con **SVG calculado en el servidor**,
+reutilizando los modelos existentes (`Invoice`, `InvoiceDetail`, `Product`,
+`Customer`) — cero endpoints o dependencias extra:
+
+- **KPIs** (Ingresos, Facturas, Productos, Clientes) con **conteo animado**
+  de 0 al valor real (JS en `app.js`, clase `.js-count`).
+- **Ventas por mes** (últimos 6 meses): gráfica de área SVG. La geometría
+  (polilínea + path del área) se calcula en `_area_chart()` dentro de la vista,
+  así la plantilla solo pinta strings ya listos. La línea se "dibuja" al cargar.
+- **Donut activos/inactivos**: arco SVG con `stroke-dasharray` calculado en la
+  vista; se anima con `stroke-dashoffset`.
+- **Top 5 productos más vendidos** (agregando `InvoiceDetail`): barras
+  horizontales que crecen al cargar.
+- **Stock bajo** y **Facturas recientes** con el estilo de tabla/lista premium.
+
+> **Sobre React (decisión registrada):** se evaluó y se descartó para este
+> proyecto. React exige un build de Node — meterlo al servicio Python de Render
+> es frágil (la misma fricción por la que se descartó Tailwind), fractura la
+> arquitectura server-rendered y obligaría a añadir una capa de API
+> (serializers/endpoints/fetch = *más* código). Para un dashboard es
+> sobredimensionado. Como aprendizaje conviene en un proyecto nuevo, no aquí.
+
+## Consola de Roles: más aire + fix del conteo
+
+- Las celdas de permiso (Ver/Crear/Editar/Eliminar) pasaron de una rejilla con
+  bordes duros pegados ("todo montado") a **celdas-tarjeta separadas** que se
+  **tiñen con el color de su acción cuando se marcan** (vía `:has(input:checked)`).
+  Cada módulo es una tarjeta con sombra suave y un **distintivo con su inicial**.
+- **Fix del conteo del rail**: antes el rail mostraba `Count('permissions')`
+  = TODOS los permisos del rol (incluyendo apps internas de Django), mientras el
+  panel contaba solo los visibles → "64" vs "56". Ahora el `perm_count` del rail
+  filtra las apps excluidas
+  (`filter=~Q(permissions__content_type__app_label__in=PERMISSION_EXCLUDED_APPS)`),
+  así el rail cuadra con el panel (p. ej. Administrador: 52, no 64).
+
+## Permisos: recuadros por módulo (no lista plana)
+
+`PermissionListView.get_context_data()` agrupa los permisos por content type y
+la plantilla los muestra como **tarjetas por módulo** (una por Brand, Customer,
+Invoice, Product, User…), con distintivo, contador de permisos por módulo, y
+cada permiso con sus botones de editar/eliminar. Incluye un **buscador** que
+filtra los recuadros en vivo. Módulos de negocio primero; apps internas de
+Django al final.

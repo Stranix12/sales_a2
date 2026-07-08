@@ -1,102 +1,176 @@
 {% extends 'billing/base.html' %}
-{% block title %}Home - Sales System{% endblock %}
+{% block title %}Dashboard - Sales System{% endblock %}
 {% block content %}
 
 <!-- Bienvenida -->
-<div class="p-4 mb-4 bg-light rounded-4 shadow-sm">
-  <h1 class="fw-bold mb-1"><i class="bi bi-house-door me-2"></i>Bienvenido, {{ user.first_name|default:user.username }}!</h1>
-  <p class="lead text-muted mb-0">Sistema de Ventas y Facturación</p>
+<div class="p-4 mb-4 hero-panel d-flex flex-wrap justify-content-between align-items-center gap-3">
+  <div>
+    <h1 class="fw-bold mb-1"><i class="bi bi-grid-1x2-fill me-2"></i>Hola, {{ user.first_name|default:user.username }}</h1>
+    <p class="lead mb-0">Resumen general del sistema de ventas y facturación</p>
+  </div>
+  <div class="text-end d-none d-md-block">
+    <div class="stat-label" style="color:rgba(255,255,255,.7)">Valor de inventario</div>
+    <div class="fs-3 fw-bold"><span class="js-count" data-count="{{ inventory_value|stringformat:'f' }}" data-money="1">$0.00</span></div>
+  </div>
 </div>
 
-<!-- Tarjetas de resumen -->
+<!-- KPIs -->
 <div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card text-white bg-primary border-0 shadow-sm rounded-4 h-100">
-      <div class="card-body text-center">
-        <i class="bi bi-tag fs-2"></i>
-        <h2 class="fw-bold mb-0">{{ total_brands }}</h2>
-        <p class="mb-2">Marcas</p>
-        <a href="{% url 'billing:brand_list' %}" class="btn btn-sm btn-light">Ver todas</a>
+  <div class="col-6 col-lg-3">
+    <div class="stat-tile">
+      <span class="stat-ico stat-ico-a"><i class="bi bi-cash-stack"></i></span>
+      <div class="stat-meta">
+        <div class="stat-value js-count" data-count="{{ revenue|stringformat:'f' }}" data-money="1">$0.00</div>
+        <div class="stat-label">Ingresos</div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-white bg-success border-0 shadow-sm rounded-4 h-100">
-      <div class="card-body text-center">
-        <i class="bi bi-box-seam fs-2"></i>
-        <h2 class="fw-bold mb-0">{{ total_products }}</h2>
-        <p class="mb-2">Productos</p>
-        <a href="{% url 'billing:product_list' %}" class="btn btn-sm btn-light">Ver todos</a>
+  <div class="col-6 col-lg-3">
+    <div class="stat-tile">
+      <span class="stat-ico stat-ico-b"><i class="bi bi-receipt"></i></span>
+      <div class="stat-meta">
+        <div class="stat-value js-count" data-count="{{ total_invoices }}">0</div>
+        <div class="stat-label">Facturas</div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-white bg-info border-0 shadow-sm rounded-4 h-100">
-      <div class="card-body text-center">
-        <i class="bi bi-people fs-2"></i>
-        <h2 class="fw-bold mb-0">{{ total_customers }}</h2>
-        <p class="mb-2">Clientes</p>
-        <a href="{% url 'billing:customer_list' %}" class="btn btn-sm btn-light">Ver todos</a>
+  <div class="col-6 col-lg-3">
+    <div class="stat-tile">
+      <span class="stat-ico stat-ico-c"><i class="bi bi-box-seam"></i></span>
+      <div class="stat-meta">
+        <div class="stat-value js-count" data-count="{{ total_products }}">0</div>
+        <div class="stat-label">Productos</div>
       </div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-dark bg-warning border-0 shadow-sm rounded-4 h-100">
-      <div class="card-body text-center">
-        <i class="bi bi-receipt fs-2"></i>
-        <h2 class="fw-bold mb-0">{{ total_invoices }}</h2>
-        <p class="mb-2">Facturas</p>
-        <a href="{% url 'billing:invoice_list' %}" class="btn btn-sm btn-dark">Ver todas</a>
+  <div class="col-6 col-lg-3">
+    <div class="stat-tile">
+      <span class="stat-ico stat-ico-d"><i class="bi bi-people"></i></span>
+      <div class="stat-meta">
+        <div class="stat-value js-count" data-count="{{ total_customers }}">0</div>
+        <div class="stat-label">Clientes</div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="row g-4">
-  <!-- Últimas facturas -->
-  <div class="col-12 col-lg-7">
-    <div class="card border-0 shadow-sm rounded-4">
-      <div class="card-header bg-dark text-white"><h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Facturas recientes</h5></div>
-      <div class="card-body">
-        <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>#</th><th>Cliente</th><th>Fecha</th><th class="text-end">Total</th></tr></thead>
-          <tbody>
-            {% for inv in recent_invoices %}
-            <tr>
-              <td><a href="{% url 'billing:invoice_detail' inv.pk %}">#{{ inv.id }}</a></td>
-              <td>{{ inv.customer }}</td>
-              <td>{{ inv.invoice_date|date:"d/m/Y" }}</td>
-              <td class="text-end fw-semibold">${{ inv.total }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4" class="text-center text-muted">Aún no hay facturas.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+<!-- Gráficas: ventas por mes + donut de productos -->
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-8">
+    <div class="dash-card">
+      <div class="dash-card-head">
+        <h5><span class="head-ico"><i class="bi bi-graph-up-arrow"></i></span>Ventas por mes</h5>
+        <span class="sub">Últimos 6 meses</span>
+      </div>
+      <svg class="area-chart" viewBox="0 0 {{ sales_chart.w }} {{ sales_chart.h }}" role="img" aria-label="Ventas por mes">
+        <defs>
+          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#33459b" stop-opacity="0.28"/>
+            <stop offset="100%" stop-color="#33459b" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path class="area-fill" d="{{ sales_chart.area }}" fill="url(#areaGrad)"/>
+        <polyline class="area-line" points="{{ sales_chart.polyline }}"/>
+        {% for p in sales_chart.points %}
+        <circle class="area-dot" cx="{{ p.x }}" cy="{{ p.y }}" r="4">
+          <title>{{ p.label }}: ${{ p.value|floatformat:2 }}</title>
+        </circle>
+        <text class="area-lbl" x="{{ p.x }}" y="{{ sales_chart.baseline|add:24 }}">{{ p.label }}</text>
+        {% endfor %}
+      </svg>
+    </div>
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="dash-card">
+      <div class="dash-card-head">
+        <h5><span class="head-ico"><i class="bi bi-pie-chart"></i></span>Productos</h5>
+      </div>
+      <div class="donut-wrap">
+        <svg class="donut" viewBox="0 0 150 150" style="--c:{{ donut.C }}">
+          <circle class="donut-track" cx="75" cy="75" r="{{ donut.r }}"/>
+          <circle class="donut-arc" cx="75" cy="75" r="{{ donut.r }}"
+                  stroke-dasharray="{{ donut.active_len }} {{ donut.rest }}"/>
+        </svg>
+        <div class="donut-center">
+          <span class="big">{{ donut.pct }}%</span>
+          <span class="lbl">Activos</span>
+        </div>
+      </div>
+      <div class="donut-legend">
+        <span><span class="dot" style="background:var(--c-primary-600)"></span>Activos: {{ donut.active }}</span>
+        <span><span class="dot" style="background:var(--line)"></span>Inactivos: {{ donut.inactive }}</span>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Productos con bajo stock -->
+<!-- Top productos + stock bajo -->
+<div class="row g-3 mb-4">
+  <div class="col-12 col-lg-7">
+    <div class="dash-card">
+      <div class="dash-card-head">
+        <h5><span class="head-ico"><i class="bi bi-trophy"></i></span>Productos más vendidos</h5>
+        <span class="sub">Por unidades</span>
+      </div>
+      {% for p in top_products %}
+      <div class="bar-row">
+        <div class="bar-row-top">
+          <span class="nm">{{ forloop.counter }}. {{ p.name }}</span>
+          <span class="qty">{{ p.qty }} u</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:{{ p.pct }}%"></div></div>
+      </div>
+      {% empty %}
+      <div class="empty-state"><i class="bi bi-bar-chart"></i>Aún no hay ventas registradas.</div>
+      {% endfor %}
+    </div>
+  </div>
   <div class="col-12 col-lg-5">
-    <div class="card border-0 shadow-sm rounded-4">
-      <div class="card-header bg-danger text-white"><h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Alerta de stock bajo</h5></div>
-      <div class="card-body">
-        <table class="table table-sm align-middle mb-0">
-          <thead><tr><th>Producto</th><th class="text-end">Stock</th></tr></thead>
-          <tbody>
-            {% for p in low_stock %}
-            <tr>
-              <td><a href="{% url 'billing:product_detail' p.pk %}">{{ p.name }}</a></td>
-              <td class="text-end"><span class="badge bg-danger rounded-pill">{{ p.stock }}</span></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="2" class="text-center text-success">Todos los productos tienen stock.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div class="dash-card">
+      <div class="dash-card-head">
+        <h5><span class="head-ico" style="background:#fbe4e6;color:#b02a37"><i class="bi bi-exclamation-triangle"></i></span>Stock bajo</h5>
+      </div>
+      <div class="mini-list">
+        {% for p in low_stock %}
+        <div class="mini-row">
+          <a href="{% url 'billing:product_detail' p.pk %}" class="nm">{{ p.name }}</a>
+          <span class="status-pill {% if p.stock == 0 %}status-off{% else %}status-on{% endif %}"
+                style="{% if p.stock == 0 %}background:#fbe4e6;color:#b02a37{% endif %}">
+            {{ p.stock }} unidad{{ p.stock|pluralize:"es" }}
+          </span>
+        </div>
+        {% empty %}
+        <div class="empty-state"><i class="bi bi-check-circle"></i>Todos los productos tienen stock suficiente.</div>
+        {% endfor %}
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Facturas recientes -->
+<div class="dash-card">
+  <div class="dash-card-head">
+    <h5><span class="head-ico"><i class="bi bi-clock-history"></i></span>Facturas recientes</h5>
+    <a href="{% url 'billing:invoice_list' %}" class="btn btn-sm btn-outline-primary">Ver todas</a>
+  </div>
+  <div class="table-scroll">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>#</th><th>Cliente</th><th>Fecha</th><th class="text-end">Total</th></tr>
+      </thead>
+      <tbody>
+        {% for inv in recent_invoices %}
+        <tr>
+          <td><a href="{% url 'billing:invoice_detail' inv.pk %}" class="cell-primary">#{{ inv.id }}</a></td>
+          <td>{{ inv.customer }}</td>
+          <td class="cell-sub">{{ inv.invoice_date|date:"d/m/Y" }}</td>
+          <td class="text-end fw-semibold">${{ inv.total|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4"><div class="empty-state"><i class="bi bi-receipt"></i>Aún no hay facturas.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 

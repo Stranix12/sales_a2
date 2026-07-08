@@ -45,8 +45,8 @@
   .rp-console {
     background: var(--rp-bg);
     display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 16px;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
     flex: 1 1 auto;
     min-height: 460px;
     color: var(--rp-ink);
@@ -166,36 +166,50 @@
   .rp-dot.change { background: var(--rp-change); }
   .rp-dot.delete { background: var(--rp-delete); }
 
-  .rp-perm-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px 20px; }
-  .rp-group-card { border: 1px solid var(--rp-border); border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
-  .rp-group-head { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--rp-surface-2); border-bottom: 1px solid var(--rp-border); }
-  .rp-group-head .name { font-weight: 700; font-size: 13.5px; }
-  .rp-group-head .code { font-family: Consolas, monospace; font-size: 11px; color: var(--rp-faint); }
-  .rp-group-head .spacer { flex: 1 1 auto; }
-  .rp-select-all { font-size: 11.5px; font-weight: 600; color: var(--rp-accent); background: none; border: none; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
-  .rp-select-all:hover { background: var(--rp-accent-soft); }
-
-  .rp-perm-row { display: grid; grid-template-columns: repeat(4, 1fr); }
-  .rp-perm-toggle {
-    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-    border-right: 1px solid var(--rp-border); border-top: 1px solid var(--rp-border);
-    cursor: pointer; user-select: none;
+  .rp-perm-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 20px 22px; }
+  .rp-group-card {
+    border: 1px solid var(--rp-border); border-radius: 16px; overflow: hidden; margin-bottom: 16px;
+    background: #fff; box-shadow: 0 1px 2px rgba(18,24,45,.05), 0 4px 14px rgba(18,24,45,.04);
+    transition: box-shadow .18s ease;
   }
-  .rp-perm-toggle:last-child { border-right: none; }
-  .rp-perm-toggle:hover { background: var(--rp-surface-2); }
+  .rp-group-card:hover { box-shadow: 0 2px 6px rgba(18,24,45,.07), 0 10px 26px rgba(18,24,45,.07); }
+  .rp-group-head { display: flex; align-items: center; gap: 12px; padding: 13px 18px; background: var(--rp-surface-2); border-bottom: 1px solid var(--rp-border); }
+  .rp-group-badge {
+    width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
+    background: var(--rp-accent-soft); color: var(--rp-accent);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;
+  }
+  .rp-group-head .name { font-weight: 700; font-size: 14.5px; }
+  .rp-group-head .code { font-family: Consolas, monospace; font-size: 11px; color: var(--rp-faint); background: var(--rp-bg); border: 1px solid var(--rp-border); padding: 2px 8px; border-radius: 999px; }
+  .rp-group-head .spacer { flex: 1 1 auto; }
+  .rp-select-all { font-size: 12px; font-weight: 600; color: var(--rp-accent); background: none; border: 1px solid transparent; cursor: pointer; padding: 4px 10px; border-radius: 7px; }
+  .rp-select-all:hover { background: var(--rp-accent-soft); border-color: var(--rp-accent-soft); }
+
+  /* Celdas de permiso: separadas, con aire, y tintadas con el color de la
+     acción cuando están marcadas (vía :has) — se siente "diseñado", no una
+     tabla apretada. */
+  .rp-perm-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 18px; }
+  .rp-perm-toggle {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px; min-height: 52px;
+    border: 1.5px solid var(--rp-border); border-radius: 12px; background: #fff;
+    cursor: pointer; user-select: none;
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .rp-perm-toggle:hover { border-color: var(--rp-border-strong); background: var(--rp-surface-2); }
+  .rp-perm-toggle:has(input:checked) { background: var(--_soft); border-color: var(--_c); box-shadow: 0 1px 4px color-mix(in srgb, var(--_c) 22%, transparent); }
   .rp-perm-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .rp-box {
-    flex: 0 0 auto; width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--rp-border-strong);
+    flex: 0 0 auto; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--rp-border-strong);
     display: flex; align-items: center; justify-content: center; background: #fff;
   }
-  .rp-box svg { opacity: 0; width: 11px; height: 11px; }
+  .rp-box svg { opacity: 0; width: 12px; height: 12px; }
   .rp-perm-toggle input:checked ~ .rp-box { border-color: var(--_c); background: var(--_c); }
   .rp-perm-toggle input:checked ~ .rp-box svg { opacity: 1; }
   .rp-perm-toggle input:focus-visible ~ .rp-box { outline: 2px solid var(--rp-accent); outline-offset: 2px; }
-  .rp-perm-toggle.view { --_c: var(--rp-view); }
-  .rp-perm-toggle.add { --_c: var(--rp-add); }
-  .rp-perm-toggle.change { --_c: var(--rp-change); }
-  .rp-perm-toggle.delete { --_c: var(--rp-delete); }
+  .rp-perm-toggle.view { --_c: var(--rp-view); --_soft: var(--rp-view-soft); }
+  .rp-perm-toggle.add { --_c: var(--rp-add); --_soft: var(--rp-add-soft); }
+  .rp-perm-toggle.change { --_c: var(--rp-change); --_soft: var(--rp-change-soft); }
+  .rp-perm-toggle.delete { --_c: var(--rp-delete); --_soft: var(--rp-delete-soft); }
   .rp-perm-label { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .rp-perm-label .action { font-size: 12.5px; font-weight: 600; }
   .rp-perm-toggle input:checked ~ .rp-perm-label .action { color: var(--_c); }
@@ -301,6 +315,7 @@
         {% for m in permission_matrix %}
         <div class="rp-group-card" data-model-name="{{ m.label|lower }}" data-model-code="{{ m.code }}">
           <div class="rp-group-head">
+            <span class="rp-group-badge">{{ m.label|first|upper }}</span>
             <span class="name">{{ m.label }}</span>
             <span class="code">{{ m.code }}</span>
             <span class="spacer"></span>

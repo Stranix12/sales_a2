@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
@@ -103,7 +103,12 @@ def _roles_with_colors():
     por posición, para diferenciarlos visualmente."""
     groups = list(
         Group.objects.order_by('name').annotate(
-            perm_count=Count('permissions', distinct=True),
+            # Solo permisos VISIBLES en la grilla (se excluyen las apps internas
+            # de Django) para que el conteo del rail cuadre con el del panel.
+            perm_count=Count(
+                'permissions', distinct=True,
+                filter=~Q(permissions__content_type__app_label__in=PERMISSION_EXCLUDED_APPS),
+            ),
             user_count=Count('user', distinct=True),
         )
     )
@@ -217,6 +222,26 @@ class PermissionListView(AdminOnlyMixin, ListView):
     template_name = 'security/permission_list.html'
     context_object_name = 'items'
     queryset = Permission.objects.select_related('content_type')
+
+    def get_context_data(self, **kwargs):
+        """Agrupa los permisos por modelo (content type) para mostrarlos como
+        tarjetas en vez de una tabla plana. Los módulos de negocio primero."""
+        ctx = super().get_context_data(**kwargs)
+        groups = {}
+        for p in self.object_list.order_by('content_type__app_label',
+                                           'content_type__model', 'codename'):
+            ct = p.content_type
+            key = (ct.app_label, ct.model)
+            if key not in groups:
+                model_class = ct.model_class()
+                label = model_class._meta.verbose_name.title() if model_class else ct.model
+                groups[key] = {'label': label, 'app': ct.app_label,
+                               'code': f'{ct.app_label}.{ct.model}', 'perms': []}
+            groups[key]['perms'].append(p)
+        order = {'billing': 0, 'purchasing': 1, 'auth': 2}
+        ctx['permission_groups'] = sorted(
+            groups.values(), key=lambda g: (order.get(g['app'], 9), g['label']))
+        return ctx
 
 class PermissionCreateView(AdminOnlyMixin, CreateView):
     model = Permission

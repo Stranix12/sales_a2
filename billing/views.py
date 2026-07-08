@@ -1,4 +1,5 @@
 import json
+import math
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
@@ -6,6 +7,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
 from django.urls import reverse_lazy
+from django.utils import timezone
+from django.db.models import Sum, F, DecimalField, ExpressionWrapper
+from django.db.models.functions import TruncMonth
 from .models import *
 from .forms import (BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
                     CustomerForm, CustomerFilterForm, InvoiceForm, InvoiceDetailFormSet,
@@ -17,17 +21,104 @@ from shared.decorators import audit_action
 from shared.emails import send_invoice_email
 
 
+_MESES_ABREV = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+
+def _ultimos_meses(n=6):
+    """Lista de (año, mes) de los últimos n meses, del más viejo al actual."""
+    hoy = timezone.localtime() if timezone.is_aware(timezone.now()) else timezone.now()
+    y, m = hoy.year, hoy.month
+    meses = []
+    for _ in range(n):
+        meses.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    meses.reverse()
+    return meses
+
+
+def _area_chart(values, labels):
+    """Calcula la geometría SVG (polilínea + área rellena) de la serie de
+    ventas por mes, escalada a un viewBox fijo. Todo el cálculo vive aquí
+    para que la plantilla solo pinte strings ya listos."""
+    W, H = 640, 200
+    top, bottom, left, right = 14, 168, 14, 626
+    max_val = max(values) or 1
+    n = len(values)
+    def x_at(i):
+        return left + (i * (right - left) / (n - 1) if n > 1 else 0)
+    def y_at(v):
+        return bottom - (v / max_val) * (bottom - top)
+    pts = [(round(x_at(i), 1), round(y_at(v), 1)) for i, v in enumerate(values)]
+    polyline = ' '.join(f'{x},{y}' for x, y in pts)
+    area = ('M ' + f'{pts[0][0]},{bottom} '
+            + ' '.join(f'L {x},{y}' for x, y in pts)
+            + f' L {pts[-1][0]},{bottom} Z')
+    return {
+        'w': W, 'h': H, 'baseline': bottom, 'polyline': polyline, 'area': area,
+        'points': [{'x': x, 'y': y, 'label': labels[i], 'value': values[i]}
+                   for i, (x, y) in enumerate(pts)],
+    }
+
+
 # === HOME (Página principal / Dashboard) ===
 @login_required
 def home(request):
-    """Vista principal del sistema. Muestra un resumen general."""
+    """Dashboard: KPIs + gráficas (SVG propio) calculadas desde los modelos
+    existentes (Invoice, InvoiceDetail, Product, Customer). Sin dependencias
+    externas ni endpoints extra — todo se resuelve en esta vista."""
+    money = ExpressionWrapper(F('unit_price') * F('stock'), output_field=DecimalField())
+
+    # --- KPIs ---
+    revenue = Invoice.objects.aggregate(s=Sum('total'))['s'] or Decimal('0')
+    inventory_value = Product.objects.aggregate(v=Sum(money))['v'] or Decimal('0')
+
+    # --- Ventas por mes (últimos 6 meses, con relleno en 0) ---
+    meses = _ultimos_meses(6)
+    ventas = (Invoice.objects
+              .annotate(mes=TruncMonth('invoice_date'))
+              .values('mes')
+              .annotate(total=Sum('total')))
+    ventas_map = {(r['mes'].year, r['mes'].month): float(r['total'] or 0)
+                  for r in ventas if r['mes']}
+    valores = [round(ventas_map.get((y, m), 0.0), 2) for (y, m) in meses]
+    etiquetas = [_MESES_ABREV[m - 1] for (y, m) in meses]
+
+    # --- Top 5 productos más vendidos (por cantidad) ---
+    top = (InvoiceDetail.objects
+           .values('product__name')
+           .annotate(qty=Sum('quantity'))
+           .order_by('-qty')[:5])
+    top_products = [{'name': t['product__name'] or '—', 'qty': t['qty'] or 0} for t in top]
+    max_qty = max((t['qty'] for t in top_products), default=0) or 1
+    for t in top_products:
+        t['pct'] = round(t['qty'] / max_qty * 100)
+
+    # --- Donut: productos activos vs inactivos ---
+    activos = Product.objects.filter(is_active=True).count()
+    inactivos = Product.objects.filter(is_active=False).count()
+    total_p = activos + inactivos
+    r = 54
+    C = round(2 * math.pi * r, 2)
+    activos_len = round(C * activos / total_p, 2) if total_p else 0
+    donut = {'r': r, 'C': C, 'active_len': activos_len, 'rest': round(C - activos_len, 2),
+             'active': activos, 'inactive': inactivos,
+             'pct': round(activos / total_p * 100) if total_p else 0}
+
     context = {
         'total_brands': Brand.objects.count(),
         'total_products': Product.objects.count(),
         'total_customers': Customer.objects.count(),
         'total_invoices': Invoice.objects.count(),
+        'revenue': revenue,
+        'inventory_value': inventory_value,
+        'sales_chart': _area_chart(valores, etiquetas),
+        'top_products': top_products,
+        'donut': donut,
         'recent_invoices': Invoice.objects.select_related('customer')[:5],
-        'low_stock': Product.objects.filter(stock__lte=5, is_active=True),
+        'low_stock': Product.objects.filter(stock__lte=5, is_active=True)[:6],
     }
     return render(request, 'billing/home.html', context)
 
