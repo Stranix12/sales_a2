@@ -311,6 +311,10 @@ code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-siz
   padding:.8rem 1rem; text-align:left; border:0; white-space:nowrap;
 }
 .table.table-dark > thead, .table > thead.table-dark{background:var(--navbar-1)}
+/* Encabezados con fondo claro contextual (table-secondary/light): el texto
+   debe ser oscuro, si no queda casi blanco sobre gris claro (invisible). */
+.table > thead.table-secondary th,
+.table > thead.table-light th{color:var(--ink); background:transparent}
 .table > tbody td, .table > tbody th{padding:.7rem 1rem; border-top:1px solid var(--line-2); vertical-align:middle}
 .table.align-middle td, .table.align-middle th{vertical-align:middle}
 .table-striped > tbody > tr:nth-of-type(odd){background:var(--surface-2)}

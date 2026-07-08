@@ -1306,3 +1306,21 @@ Invoice, Product, User…), con distintivo, contador de permisos por módulo, y
 cada permiso con sus botones de editar/eliminar. Incluye un **buscador** que
 filtra los recuadros en vivo. Módulos de negocio primero; apps internas de
 Django al final.
+
+## Formularios de Compra y Factura: filas dinámicas + claridad
+
+- **Encabezados legibles**: las tablas de detalle usan `thead.table-secondary`
+  (fondo claro). El CSS global ponía el texto del encabezado en color claro
+  (asumía fondo oscuro) → quedaba invisible. Fix en `app.css`:
+  `.table > thead.table-secondary th { color: var(--ink) }`.
+- **Botón "Agregar producto"**: ambos formsets pasaron de `extra=3` fijas a
+  `extra=1` + un botón que crea filas dinámicamente y un botón 🗑 por fila para
+  quitarlas. La técnica: se renderiza `{{ formset.empty_form }}` en un
+  `<template>` (con `__prefix__`), y el JS clona la fila, **renumera**
+  `name/id/for` a `0..n-1` y actualiza `TOTAL_FORMS`. Las filas vacías/no usadas
+  se ignoran al guardar (Django las salta si no cambian respecto a su inicial;
+  `quantity` tiene default=1, por eso una fila intacta manda `quantity=1`).
+  En Factura se conservó el autocompletado de precio y la validación de stock.
+- **Claridad del formulario de Compra**: traducido a español, con una guía que
+  explica qué va en cada columna (Producto / Cantidad / Costo unitario /
+  Subtotal) y ayudas bajo Proveedor y N.º de factura.

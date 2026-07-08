@@ -17,19 +17,27 @@
       <!-- Cabecera: proveedor y número de factura -->
       <div class="row mb-4 g-3">
         <div class="col-md-6">
-          <label class="form-label fw-semibold">Supplier</label>
+          <label class="form-label fw-semibold">Proveedor</label>
           {{ form.supplier }}
+          <div class="form-text">A quién le compras la mercadería.</div>
           {% for error in form.supplier.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
         </div>
         <div class="col-md-6">
-          <label class="form-label fw-semibold">Supplier Invoice No.</label>
+          <label class="form-label fw-semibold">N.º de factura del proveedor</label>
           {{ form.document_number }}
+          <div class="form-text">El número que aparece en la factura que te dio el proveedor.</div>
           {% for error in form.document_number.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
         </div>
       </div>
 
       <!-- Líneas de detalle -->
-      <h5 class="mb-3"><i class="bi bi-list-ul me-2"></i>Purchase Lines</h5>
+      <h5 class="mb-1"><i class="bi bi-list-ul me-2"></i>Productos de la compra</h5>
+      <p class="text-muted small mb-3">
+        Cada fila es un producto que estás comprando. Elige el <strong>producto</strong>,
+        escribe la <strong>cantidad</strong> de unidades y el <strong>costo unitario</strong>
+        (lo que te cuesta cada unidad). El <strong>subtotal</strong> de la fila y los totales
+        se calculan solos. Deja en blanco las filas que no uses.
+      </p>
       {{ formset.management_form }}
       {% for error in formset.non_form_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
 
@@ -37,11 +45,11 @@
         <table class="table table-bordered align-middle" id="detail-table">
           <thead class="table-secondary">
             <tr>
-              <th style="min-width:220px;">Product</th>
-              <th style="width:120px;">Quantity</th>
-              <th style="width:150px;">Unit Cost</th>
+              <th style="min-width:220px;">Producto</th>
+              <th style="width:120px;">Cantidad</th>
+              <th style="width:150px;">Costo unitario</th>
               <th style="width:130px;" class="text-end">Subtotal</th>
-              <th style="width:70px;" class="text-center">Del.</th>
+              <th style="width:70px;" class="text-center">Quitar</th>
             </tr>
           </thead>
           <tbody>
@@ -64,13 +72,35 @@
                 <span class="fw-semibold text-success subtotal-cell">$0.00</span>
               </td>
               <td class="text-center">
-                {% if detail_form.instance.pk %}{{ detail_form.DELETE }}{% endif %}
+                {% if detail_form.instance.pk %}
+                  <label class="text-muted small" title="Marca para eliminar esta línea al guardar">{{ detail_form.DELETE }}</label>
+                {% else %}
+                  <button type="button" class="act-btn act-del js-remove-row" title="Quitar fila"><i class="bi bi-trash"></i></button>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+
+      <!-- Botón para agregar más productos (filas dinámicas) -->
+      <button type="button" class="btn btn-outline-success btn-sm mb-3" id="addRowBtn">
+        <i class="bi bi-plus-lg me-1"></i>Agregar producto
+      </button>
+
+      <!-- Plantilla de fila nueva (usa empty_form del formset con __prefix__) -->
+      <template id="rowTemplate">
+        <tr class="detail-row">
+          <td>{{ formset.empty_form.product }}{{ formset.empty_form.id }}</td>
+          <td>{{ formset.empty_form.quantity }}</td>
+          <td>{{ formset.empty_form.unit_cost }}</td>
+          <td class="text-end"><span class="fw-semibold text-success subtotal-cell">$0.00</span></td>
+          <td class="text-center">
+            <button type="button" class="act-btn act-del js-remove-row" title="Quitar fila"><i class="bi bi-trash"></i></button>
+          </td>
+        </tr>
+      </template>
 
       <!-- Totales en vivo -->
       <div class="row justify-content-end mb-3">
@@ -81,7 +111,7 @@
               <td class="text-end fw-semibold" id="preview-subtotal">$0.00</td>
             </tr>
             <tr>
-              <td class="text-muted">Tax (15%)</td>
+              <td class="text-muted">Impuesto (15%)</td>
               <td class="text-end fw-semibold" id="preview-tax">$0.00</td>
             </tr>
             <tr class="table-success">
@@ -93,10 +123,10 @@
       </div>
 
       <div class="d-flex justify-content-between align-items-center mt-3">
-        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Tax (15%) is calculated automatically on save.</p>
+        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>El impuesto (15%) se calcula automáticamente al guardar.</p>
         <div class="d-flex gap-2">
-          <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary">Cancel</a>
-          <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i>Save Purchase</button>
+          <a href="{% url 'purchasing:purchase_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-success"><i class="bi bi-save me-1"></i>Guardar compra</button>
         </div>
       </div>
     </form>
@@ -104,36 +134,88 @@
 </div>
 
 <script>
-function updateRow(row) {
-  const qtyInput = row.querySelector('input[id$="-quantity"]');
-  const costInput = row.querySelector('input[id$="-unit_cost"]');
-  const subtotalCell = row.querySelector('.subtotal-cell');
-  const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
-  const cost = parseFloat(costInput ? costInput.value : 0) || 0;
-  subtotalCell.textContent = '$' + (qty * cost).toFixed(2);
-  updateTotals();
-}
+(function () {
+  const table = document.getElementById('detail-table');
+  const tbody = table.querySelector('tbody');
+  const totalInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
+  const prefix = totalInput.name.slice(0, -('-TOTAL_FORMS'.length));
+  const tpl = document.getElementById('rowTemplate');
 
-function updateTotals() {
-  let subtotal = 0;
-  document.querySelectorAll('tr.detail-row').forEach(row => {
-    subtotal += parseFloat(row.querySelector('.subtotal-cell').textContent.replace('$', '')) || 0;
-  });
-  const tax = subtotal * 0.15;
-  document.getElementById('preview-subtotal').textContent = '$' + subtotal.toFixed(2);
-  document.getElementById('preview-tax').textContent = '$' + tax.toFixed(2);
-  document.getElementById('preview-total').textContent = '$' + (subtotal + tax).toFixed(2);
-}
+  function updateRow(row) {
+    const qtyInput = row.querySelector('input[id$="-quantity"]');
+    const costInput = row.querySelector('input[id$="-unit_cost"]');
+    const subtotalCell = row.querySelector('.subtotal-cell');
+    const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+    const cost = parseFloat(costInput ? costInput.value : 0) || 0;
+    subtotalCell.textContent = '$' + (qty * cost).toFixed(2);
+    updateTotals();
+  }
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('tr.detail-row').forEach(row => {
+  function updateTotals() {
+    let subtotal = 0;
+    tbody.querySelectorAll('tr.detail-row').forEach(row => {
+      subtotal += parseFloat(row.querySelector('.subtotal-cell').textContent.replace('$', '')) || 0;
+    });
+    const tax = subtotal * 0.15;
+    document.getElementById('preview-subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('preview-tax').textContent = '$' + tax.toFixed(2);
+    document.getElementById('preview-total').textContent = '$' + (subtotal + tax).toFixed(2);
+  }
+
+  // Renumera name/id/for de todas las filas a 0..n-1 y ajusta TOTAL_FORMS.
+  // Las filas guardadas (con -id) nunca se eliminan por JS y quedan primero,
+  // así que se respeta que las iniciales ocupen los primeros índices.
+  function reindex() {
+    const rows = tbody.querySelectorAll('tr.detail-row');
+    const re = new RegExp('(' + prefix + '-)(\\d+|__prefix__)(-)');
+    rows.forEach((row, i) => {
+      row.querySelectorAll('input, select, textarea, label').forEach(el => {
+        ['name', 'id', 'for'].forEach(attr => {
+          const v = el.getAttribute(attr);
+          if (v) el.setAttribute(attr, v.replace(re, '$1' + i + '$3'));
+        });
+      });
+    });
+    totalInput.value = rows.length;
+  }
+
+  function bindRow(row) {
     const qty = row.querySelector('input[id$="-quantity"]');
     const cost = row.querySelector('input[id$="-unit_cost"]');
     if (qty) qty.addEventListener('input', () => updateRow(row));
     if (cost) cost.addEventListener('input', () => updateRow(row));
+    const rm = row.querySelector('.js-remove-row');
+    if (rm) rm.addEventListener('click', () => removeRow(row));
+  }
+
+  function addRow() {
+    tbody.appendChild(tpl.content.cloneNode(true));
+    const row = tbody.querySelector('tr.detail-row:last-child');
+    reindex();
+    bindRow(row);
     updateRow(row);
-  });
-});
+    const sel = row.querySelector('select');
+    if (sel) sel.focus();
+  }
+
+  function removeRow(row) {
+    // No dejar la tabla sin filas: si es la última, solo se limpia.
+    if (tbody.querySelectorAll('tr.detail-row').length === 1) {
+      row.querySelectorAll('select, input[type="number"]').forEach(el => {
+        el.value = el.type === 'number' ? el.getAttribute('placeholder') === '1' ? '1' : '' : '';
+      });
+      updateRow(row);
+      return;
+    }
+    row.remove();
+    reindex();
+    updateTotals();
+  }
+
+  document.getElementById('addRowBtn').addEventListener('click', addRow);
+  tbody.querySelectorAll('tr.detail-row').forEach(bindRow);
+  tbody.querySelectorAll('tr.detail-row').forEach(updateRow);
+})();
 </script>
 
 {% endblock %}

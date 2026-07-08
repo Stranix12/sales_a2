@@ -58,13 +58,36 @@
                 <span class="fw-semibold text-success subtotal-cell">$0.00</span>
               </td>
               <td class="text-center">
-                {% if detail_form.instance.pk %}{{ detail_form.DELETE }}{% endif %}
+                {% if detail_form.instance.pk %}
+                  <label class="text-muted small" title="Marca para eliminar esta línea al guardar">{{ detail_form.DELETE }}</label>
+                {% else %}
+                  <button type="button" class="act-btn act-del js-remove-row" title="Quitar fila"><i class="bi bi-trash"></i></button>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+
+      <!-- Botón para agregar más productos (filas dinámicas) -->
+      <button type="button" class="btn btn-outline-warning btn-sm mb-3" id="addRowBtn">
+        <i class="bi bi-plus-lg me-1"></i>Agregar producto
+      </button>
+
+      <!-- Plantilla de fila nueva (usa empty_form del formset con __prefix__) -->
+      <template id="rowTemplate">
+        <tr class="detail-row">
+          <td>{{ formset.empty_form.product }}{{ formset.empty_form.id }}</td>
+          <td class="text-center"><span class="badge bg-secondary stock-badge">—</span></td>
+          <td>{{ formset.empty_form.quantity }}</td>
+          <td>{{ formset.empty_form.unit_price }}</td>
+          <td class="text-end"><span class="fw-semibold text-success subtotal-cell">$0.00</span></td>
+          <td class="text-center">
+            <button type="button" class="act-btn act-del js-remove-row" title="Quitar fila"><i class="bi bi-trash"></i></button>
+          </td>
+        </tr>
+      </template>
 
       <!-- Totales en vivo -->
       <div class="row justify-content-end mb-3">
@@ -98,89 +121,139 @@
 </div>
 
 <script>
-const PRODUCTS = {{ products_json|safe }};
+(function () {
+  const PRODUCTS = {{ products_json|safe }};
+  const table = document.getElementById('detail-table');
+  const tbody = table.querySelector('tbody');
+  const totalInput = document.querySelector('input[name$="-TOTAL_FORMS"]');
+  const prefix = totalInput.name.slice(0, -('-TOTAL_FORMS'.length));
+  const tpl = document.getElementById('rowTemplate');
 
-function updateRow(row) {
-  const sel = row.querySelector('select[id$="-product"]');
-  const qtyInput = row.querySelector('input[id$="-quantity"]');
-  const priceInput = row.querySelector('input[id$="-unit_price"]');
-  const stockBadge = row.querySelector('.stock-badge');
-  const subtotalCell = row.querySelector('.subtotal-cell');
+  function updateRow(row) {
+    const sel = row.querySelector('select[id$="-product"]');
+    const qtyInput = row.querySelector('input[id$="-quantity"]');
+    const priceInput = row.querySelector('input[id$="-unit_price"]');
+    const stockBadge = row.querySelector('.stock-badge');
+    const subtotalCell = row.querySelector('.subtotal-cell');
 
-  const pid = sel ? sel.value : '';
-  const data = PRODUCTS[pid];
+    const pid = sel ? sel.value : '';
+    const data = PRODUCTS[pid];
 
-  if (data) {
-    // Rellenar precio y bloquearlo
-    priceInput.value = data.price;
-    priceInput.readOnly = true;
-    priceInput.classList.add('bg-light', 'border-secondary-subtle');
+    if (data) {
+      // Rellenar precio y bloquearlo
+      priceInput.value = data.price;
+      priceInput.readOnly = true;
+      priceInput.classList.add('bg-light', 'border-secondary-subtle');
 
-    // Mostrar stock disponible
-    const qty = parseInt(qtyInput.value) || 0;
-    if (data.stock <= 0) {
-      stockBadge.textContent = 'Sin stock';
-      stockBadge.className = 'badge bg-danger stock-badge';
-    } else {
-      stockBadge.textContent = 'Disp: ' + data.stock;
-      stockBadge.className = 'badge ' + (data.stock <= 5 ? 'bg-warning text-dark' : 'bg-success') + ' stock-badge';
-    }
-
-    // Validar cantidad vs stock
-    const err = row.querySelector('.stock-qty-error');
-    if (qty > data.stock) {
-      qtyInput.classList.add('is-invalid');
-      if (!err) {
-        const div = document.createElement('div');
-        div.className = 'text-danger small stock-qty-error';
-        div.textContent = 'Máximo disponible: ' + data.stock;
-        qtyInput.parentNode.appendChild(div);
+      // Mostrar stock disponible
+      const qty = parseInt(qtyInput.value) || 0;
+      if (data.stock <= 0) {
+        stockBadge.textContent = 'Sin stock';
+        stockBadge.className = 'badge bg-danger stock-badge';
       } else {
-        err.textContent = 'Máximo disponible: ' + data.stock;
+        stockBadge.textContent = 'Disp: ' + data.stock;
+        stockBadge.className = 'badge ' + (data.stock <= 5 ? 'bg-warning text-dark' : 'bg-success') + ' stock-badge';
+      }
+
+      // Validar cantidad vs stock
+      const err = row.querySelector('.stock-qty-error');
+      if (qty > data.stock) {
+        qtyInput.classList.add('is-invalid');
+        if (!err) {
+          const div = document.createElement('div');
+          div.className = 'text-danger small stock-qty-error';
+          div.textContent = 'Máximo disponible: ' + data.stock;
+          qtyInput.parentNode.appendChild(div);
+        } else {
+          err.textContent = 'Máximo disponible: ' + data.stock;
+        }
+      } else {
+        qtyInput.classList.remove('is-invalid');
+        if (err) err.remove();
       }
     } else {
-      qtyInput.classList.remove('is-invalid');
+      // Sin producto seleccionado: precio editable
+      priceInput.readOnly = false;
+      priceInput.classList.remove('bg-light', 'border-secondary-subtle');
+      stockBadge.textContent = '—';
+      stockBadge.className = 'badge bg-secondary stock-badge';
+      const err = row.querySelector('.stock-qty-error');
       if (err) err.remove();
+      qtyInput.classList.remove('is-invalid');
     }
-  } else {
-    // Sin producto seleccionado: precio editable
-    priceInput.readOnly = false;
-    priceInput.classList.remove('bg-light', 'border-secondary-subtle');
-    stockBadge.textContent = '—';
-    stockBadge.className = 'badge bg-secondary stock-badge';
-    const err = row.querySelector('.stock-qty-error');
-    if (err) err.remove();
-    qtyInput.classList.remove('is-invalid');
+
+    // Calcular subtotal de la fila
+    const qty = parseFloat(qtyInput.value) || 0;
+    const price = parseFloat(priceInput.value) || 0;
+    subtotalCell.textContent = '$' + (qty * price).toFixed(2);
+
+    updateTotals();
   }
 
-  // Calcular subtotal de la fila
-  const qty = parseFloat(qtyInput.value) || 0;
-  const price = parseFloat(priceInput.value) || 0;
-  subtotalCell.textContent = '$' + (qty * price).toFixed(2);
+  function updateTotals() {
+    let subtotal = 0;
+    tbody.querySelectorAll('tr.detail-row').forEach(row => {
+      const text = row.querySelector('.subtotal-cell').textContent;
+      subtotal += parseFloat(text.replace('$', '')) || 0;
+    });
+    const tax = subtotal * 0.15;
+    document.getElementById('preview-subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('preview-tax').textContent = '$' + tax.toFixed(2);
+    document.getElementById('preview-total').textContent = '$' + (subtotal + tax).toFixed(2);
+  }
 
-  updateTotals();
-}
+  // Renumera name/id/for de todas las filas a 0..n-1 y ajusta TOTAL_FORMS.
+  // Las filas guardadas (con -id) no se eliminan por JS y quedan primero.
+  function reindex() {
+    const rows = tbody.querySelectorAll('tr.detail-row');
+    const re = new RegExp('(' + prefix + '-)(\\d+|__prefix__)(-)');
+    rows.forEach((row, i) => {
+      row.querySelectorAll('input, select, textarea, label').forEach(el => {
+        ['name', 'id', 'for'].forEach(attr => {
+          const v = el.getAttribute(attr);
+          if (v) el.setAttribute(attr, v.replace(re, '$1' + i + '$3'));
+        });
+      });
+    });
+    totalInput.value = rows.length;
+  }
 
-function updateTotals() {
-  let subtotal = 0;
-  document.querySelectorAll('tr.detail-row').forEach(row => {
-    const text = row.querySelector('.subtotal-cell').textContent;
-    subtotal += parseFloat(text.replace('$', '')) || 0;
-  });
-  const tax = subtotal * 0.15;
-  document.getElementById('preview-subtotal').textContent = '$' + subtotal.toFixed(2);
-  document.getElementById('preview-tax').textContent = '$' + tax.toFixed(2);
-  document.getElementById('preview-total').textContent = '$' + (subtotal + tax).toFixed(2);
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('tr.detail-row').forEach(row => {
+  function bindRow(row) {
     const sel = row.querySelector('select[id$="-product"]');
     const qty = row.querySelector('input[id$="-quantity"]');
     if (sel) sel.addEventListener('change', () => updateRow(row));
     if (qty) qty.addEventListener('input', () => updateRow(row));
+    const rm = row.querySelector('.js-remove-row');
+    if (rm) rm.addEventListener('click', () => removeRow(row));
+  }
+
+  function addRow() {
+    tbody.appendChild(tpl.content.cloneNode(true));
+    const row = tbody.querySelector('tr.detail-row:last-child');
+    reindex();
+    bindRow(row);
     updateRow(row);
-  });
-});
+    const sel = row.querySelector('select');
+    if (sel) sel.focus();
+  }
+
+  function removeRow(row) {
+    if (tbody.querySelectorAll('tr.detail-row').length === 1) {
+      const sel = row.querySelector('select');
+      const qty = row.querySelector('input[id$="-quantity"]');
+      if (sel) sel.value = '';
+      if (qty) qty.value = '';
+      updateRow(row);
+      return;
+    }
+    row.remove();
+    reindex();
+    updateTotals();
+  }
+
+  document.getElementById('addRowBtn').addEventListener('click', addRow);
+  tbody.querySelectorAll('tr.detail-row').forEach(bindRow);
+  tbody.querySelectorAll('tr.detail-row').forEach(updateRow);
+})();
 </script>
 {% endblock %}

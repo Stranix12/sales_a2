@@ -233,12 +233,12 @@ InvoiceDetailFormSet = inlineformset_factory(
     Invoice,            # modelo padre
     InvoiceDetail,      # modelo hijo
     fields=['product', 'quantity', 'unit_price'],
-    extra=3,            # 3 filas vacías para agregar
+    extra=1,            # 1 fila inicial; se agregan más con el botón dinámico
     can_delete=True,    # checkbox para eliminar filas
     widgets={
         'product': forms.Select(attrs={'class': 'form-select'}),
-        'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 1}),
-        'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'}),
+        'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'placeholder': '1'}),
+        'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01', 'placeholder': '0.00'}),
     },
 )
 
