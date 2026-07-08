@@ -1324,3 +1324,50 @@ Django al final.
 - **Claridad del formulario de Compra**: traducido a español, con una guía que
   explica qué va en cada columna (Producto / Cantidad / Costo unitario /
   Subtotal) y ayudas bajo Proveedor y N.º de factura.
+
+---
+
+# Facturación Electrónica (simulada, sin SRI) + bitácora de pagos
+
+Feature académica: da a las facturas apariencia de comprobante electrónico
+ecuatoriano y un flujo de cobro, **sin ninguna conexión real al SRI**.
+
+## Qué se reutilizó (para no duplicar)
+- `Customer.dni` (ya tenía validación de cédula EC) y `Customer.address` — se
+  usan como identificación y dirección del comprobante, en vez de crear campos
+  `cedula_ruc`/`direccion` nuevos.
+- El patrón de PDF de `purchasing/exports.py` (reportlab) para el comprobante.
+- `shared/emails.py::send_invoice_email` — ahora adjunta el PDF.
+
+## Modelos (migración `billing/0002`)
+- `Invoice`: `numero_factura` (único), `clave_acceso`, `payment_status`
+  (PENDIENTE/PAGADA/ANULADA), `payment_method`, `payment_date`.
+- `PaymentLog` (bitácora): factura, usuario, método, monto, fecha, nota.
+
+> **Migración segura en Render**: los campos nuevos son nullable / con default y
+> `PaymentLog` es un modelo nuevo → aditiva. `numero_factura` es `unique` pero
+> `null=True`; en PostgreSQL **múltiples NULL conviven** en un UNIQUE, así que
+> las facturas ya existentes en producción (que quedan con número NULL) no
+> chocan. Verificado en la Postgres local antes de desplegar.
+
+## Generación (`billing/electronic.py`)
+- `numero_factura`: `001-001-000000001` (establecimiento-punto emisión-secuencial).
+- `clave_acceso`: 49 dígitos con la estructura del SRI (fecha+tipo+RUC+ambiente+
+  serie+secuencial+código+tipo emisión) + **dígito verificador módulo 11**.
+  Todo calculado localmente. Datos del emisor en `settings.EMPRESA`
+  (configurables por variables de entorno `EMPRESA_*`).
+
+## Flujo
+1. Al crear una factura se asignan `numero_factura` y `clave_acceso`
+   (`asignar_datos_electronicos`).
+2. **PDF del comprobante** (`billing/invoice_export.py`): emisor, cliente
+   (dni/dirección), líneas, IVA/total, estado y clave de acceso. Ruta
+   `invoices/<pk>/pdf/`.
+3. **"Marcar como pagado"** (`invoices/<pk>/mark-paid/`, POST): modal para elegir
+   método (efectivo/transferencia/tarjeta) → estado PAGADA + fecha, registra un
+   `PaymentLog` y reenvía el comprobante con el PDF adjunto. Bloquea doble pago.
+4. Detalle: datos electrónicos, badge de estado y bitácora. Listado: columnas
+   **N.º Factura** y **Pago** (pill de estado) + botón PDF por fila.
+
+**PayPal** (bonus) se conectará aquí como un método de pago más en el flujo de
+"Marcar como pagado".

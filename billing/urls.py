@@ -55,5 +55,7 @@ name='customer_delete'),
 path('invoices/', views.InvoiceListView.as_view(), name='invoice_list'),
 path('invoices/create/', views.invoice_create, name='invoice_create'),
 path('invoices/<int:pk>/', views.invoice_detail, name='invoice_detail'),
+path('invoices/<int:pk>/pdf/', views.invoice_pdf, name='invoice_pdf'),
+path('invoices/<int:pk>/mark-paid/', views.invoice_mark_paid, name='invoice_mark_paid'),
 path('invoices/<int:pk>/delete/', views.invoice_delete, name='invoice_delete'),
 ]

@@ -59,11 +59,16 @@
         {% for col in visible_columns %}
         <td>
           {% if col.key == 'id' %}#{{ item.id }}
+          {% elif col.key == 'numero_factura' %}<span class="cell-sub">{{ item.numero_factura|default:'—' }}</span>
           {% elif col.key == 'customer' %}{{ item.customer }}
           {% elif col.key == 'invoice_date' %}{{ item.invoice_date|date:'d/m/Y H:i' }}
           {% elif col.key == 'subtotal' %}${{ item.subtotal }}
           {% elif col.key == 'tax' %}${{ item.tax }}
           {% elif col.key == 'total' %}<span class="fw-bold">${{ item.total }}</span>
+          {% elif col.key == 'payment_status' %}
+            {% if item.payment_status == 'PAGADA' %}<span class="status-pill status-on">Pagada</span>
+            {% elif item.payment_status == 'ANULADA' %}<span class="status-pill" style="background:#fbe4e6;color:#b02a37">Anulada</span>
+            {% else %}<span class="status-pill" style="background:#fbeecb;color:#8a5b00">Pendiente</span>{% endif %}
           {% elif col.key == 'is_active' %}
             {% if item.is_active %}<span class="badge bg-success">Activo</span>
             {% else %}<span class="badge bg-secondary">Inactivo</span>{% endif %}
@@ -71,8 +76,9 @@
         </td>
         {% endfor %}
         <td class="text-nowrap">
-          <a href="{% url 'billing:invoice_detail' item.pk %}" class="btn btn-sm btn-info">View</a>
-          <a href="{% url 'billing:invoice_delete' item.pk %}" class="btn btn-sm btn-danger">Delete</a>
+          <a href="{% url 'billing:invoice_detail' item.pk %}" class="btn btn-sm btn-info">Ver</a>
+          <a href="{% url 'billing:invoice_pdf' item.pk %}" class="btn btn-sm btn-outline-primary" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+          <a href="{% url 'billing:invoice_delete' item.pk %}" class="btn btn-sm btn-danger">Eliminar</a>
         </td>
       </tr>
       {% empty %}

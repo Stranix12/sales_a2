@@ -10,7 +10,7 @@ registro/facturación por un problema de correo.
 import logging
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage
 from django.template.loader import render_to_string
 
 logger = logging.getLogger('emails')
@@ -48,7 +48,7 @@ def send_welcome_email(user, temp_password=None, login_url=None):
 
 
 def send_invoice_email(invoice):
-    """Correo con el detalle de la factura, al cliente asociado."""
+    """Correo con el detalle de la factura + el PDF adjunto, al cliente."""
     customer = invoice.customer
     if not customer.email:
         logger.warning('Cliente "%s" sin email: no se envía la factura #%s.', customer, invoice.id)
@@ -59,13 +59,24 @@ def send_invoice_email(invoice):
         'customer': customer,
         'details': invoice.details.select_related('product'),
     })
+    numero = invoice.numero_factura or f'#{invoice.id}'
     try:
-        send_mail(
-            subject=f'Factura #{invoice.id} - Sales System',
-            message=body,
+        msg = EmailMessage(
+            subject=f'Factura {numero} - Sales System',
+            body=body,
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[customer.email],
+            to=[customer.email],
         )
+        # Adjuntar el PDF del comprobante. El import es local para no crear un
+        # ciclo (billing.invoice_export importa modelos) ni cargar reportlab
+        # cuando no hace falta.
+        try:
+            from billing.invoice_export import build_invoice_pdf_bytes
+            pdf = build_invoice_pdf_bytes(invoice)
+            msg.attach(f'Factura_{numero}.pdf'.replace('-', ''), pdf, 'application/pdf')
+        except Exception:
+            logger.exception('No se pudo adjuntar el PDF de la factura #%s (se envía sin adjunto).', invoice.id)
+        msg.send()
         return True
     except Exception:
         logger.exception('No se pudo enviar la factura #%s a %s', invoice.id, customer.email)

@@ -191,3 +191,16 @@ MEDIA_ROOT = BASE_DIR / 'media'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 LOGIN_URL = '/accounts/login/'
+
+# Datos del emisor para la facturación electrónica (simulada, sin SRI real).
+# Configurable aquí; se usan en el número de factura, la clave de acceso y el PDF.
+EMPRESA = {
+    'nombre': os.environ.get('EMPRESA_NOMBRE', 'SALES SYSTEM S.A.'),
+    'ruc': os.environ.get('EMPRESA_RUC', '1790012345001'),
+    'direccion': os.environ.get('EMPRESA_DIRECCION', 'Av. Principal 123 y Secundaria, Quito, Ecuador'),
+    'telefono': os.environ.get('EMPRESA_TELEFONO', '(02) 123-4567'),
+    'email': os.environ.get('EMPRESA_EMAIL', 'facturacion@salessystem.local'),
+    'ambiente': os.environ.get('EMPRESA_AMBIENTE', '1'),   # 1=pruebas, 2=producción
+    'establecimiento': '001',
+    'punto_emision': '001',
+}

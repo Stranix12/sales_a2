@@ -16,6 +16,8 @@ from .forms import (BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
                     ProductGroupForm, ProductGroupFilterForm, SupplierForm, SupplierFilterForm,
                     InvoiceFilterForm)
 from .mixins import ExportListMixin
+from .electronic import asignar_datos_electronicos
+from .invoice_export import invoice_pdf_response
 from shared.mixins import StaffRequiredMixin
 from shared.decorators import audit_action
 from shared.emails import send_invoice_email
@@ -419,13 +421,15 @@ class InvoiceListView(ExportListMixin, LoginRequiredMixin, ListView):
     export_title = 'Listado de Facturas'
     columns_session_key = 'invoice_columns'
     export_columns = [
-        {'key': 'id',           'label': '#',        'field': 'id',           'default': True},
-        {'key': 'customer',     'label': 'Cliente',  'field': 'customer',     'default': True},
-        {'key': 'invoice_date', 'label': 'Fecha',    'field': 'invoice_date', 'default': True},
-        {'key': 'subtotal',     'label': 'Subtotal', 'field': 'subtotal',     'default': True},
-        {'key': 'tax',          'label': 'IVA',      'field': 'tax',          'default': True},
-        {'key': 'total',        'label': 'Total',    'field': 'total',        'default': True},
-        {'key': 'is_active',    'label': 'Estado',   'field': 'is_active',    'default': False},
+        {'key': 'id',             'label': '#',           'field': 'id',             'default': True},
+        {'key': 'numero_factura', 'label': 'N.º Factura', 'field': 'numero_factura', 'default': True},
+        {'key': 'customer',       'label': 'Cliente',     'field': 'customer',       'default': True},
+        {'key': 'invoice_date',   'label': 'Fecha',       'field': 'invoice_date',   'default': True},
+        {'key': 'total',          'label': 'Total',       'field': 'total',          'default': True},
+        {'key': 'payment_status', 'label': 'Pago',        'field': 'payment_status', 'default': True},
+        {'key': 'subtotal',       'label': 'Subtotal',    'field': 'subtotal',       'default': False},
+        {'key': 'tax',            'label': 'IVA',         'field': 'tax',            'default': False},
+        {'key': 'is_active',      'label': 'Activa',      'field': 'is_active',      'default': False},
     ]
 
     def get_queryset(self):
@@ -486,8 +490,10 @@ def invoice_create(request):
                 invoice.tax = subtotal * Decimal('0.15')
                 invoice.total = invoice.subtotal + invoice.tax
                 invoice.save()
+                # Facturación electrónica: asignar número + clave de acceso
+                asignar_datos_electronicos(invoice)
                 send_invoice_email(invoice)
-                messages.success(request, f'Factura #{invoice.id} creada. Total: ${invoice.total}')
+                messages.success(request, f'Factura {invoice.numero_factura} creada. Total: ${invoice.total}')
                 return redirect('billing:invoice_list')
     else:
         form = InvoiceForm()
@@ -512,6 +518,44 @@ def invoice_detail(request, pk):
         pk=pk,
     )
     return render(request, 'billing/invoice_detail.html', {'invoice': invoice})
+
+@login_required
+def invoice_pdf(request, pk):
+    """Descarga el PDF (comprobante) de la factura electrónica."""
+    invoice = get_object_or_404(
+        Invoice.objects.select_related('customer').prefetch_related('details__product'), pk=pk)
+    return invoice_pdf_response(invoice)
+
+
+@login_required
+def invoice_mark_paid(request, pk):
+    """Marca una factura como PAGADA: guarda método/fecha, registra la bitácora
+    (PaymentLog) y reenvía el comprobante por correo. Solo por POST."""
+    invoice = get_object_or_404(Invoice, pk=pk)
+    if request.method != 'POST':
+        return redirect('billing:invoice_detail', pk=pk)
+    if invoice.payment_status == 'PAGADA':
+        messages.info(request, f'La factura {invoice.numero_factura} ya estaba pagada.')
+        return redirect('billing:invoice_detail', pk=pk)
+
+    method = request.POST.get('payment_method')
+    valid_methods = dict(Invoice.PAYMENT_METHOD)
+    if method not in valid_methods:
+        messages.error(request, 'Selecciona un método de pago válido.')
+        return redirect('billing:invoice_detail', pk=pk)
+
+    invoice.payment_status = 'PAGADA'
+    invoice.payment_method = method
+    invoice.payment_date = timezone.now()
+    invoice.save(update_fields=['payment_status', 'payment_method', 'payment_date'])
+    PaymentLog.objects.create(
+        invoice=invoice, user=request.user, method=method, amount=invoice.total,
+        note=request.POST.get('note', '')[:200],
+    )
+    send_invoice_email(invoice)  # reenvía el comprobante (ahora PAGADA) con el PDF
+    messages.success(request, f'Factura {invoice.numero_factura} marcada como pagada ({valid_methods[method]}).')
+    return redirect('billing:invoice_detail', pk=pk)
+
 
 @login_required
 def invoice_delete(request, pk):

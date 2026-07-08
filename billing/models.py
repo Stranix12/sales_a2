@@ -1,4 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
+from django.conf import settings
 from django.db import models
 from shared.validators import validate_cedula_ec
 
@@ -101,15 +102,56 @@ class CustomerProfile(models.Model):
     def __str__(self): return f'Profile: {self.customer}'
 
 class Invoice(models.Model):
-    """Cabecera de factura."""
+    """Cabecera de factura (con datos de facturación electrónica simulada)."""
+    PAYMENT_STATUS = [
+        ('PENDIENTE', 'Pendiente'),
+        ('PAGADA', 'Pagada'),
+        ('ANULADA', 'Anulada'),
+    ]
+    PAYMENT_METHOD = [
+        ('efectivo', 'Efectivo'),
+        ('transferencia', 'Transferencia'),
+        ('tarjeta', 'Tarjeta'),
+        ('paypal', 'PayPal'),
+    ]
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='invoices')
     invoice_date = models.DateTimeField(auto_now_add=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
+    # --- Facturación electrónica (simulada, sin conexión real al SRI) ---
+    numero_factura = models.CharField(max_length=20, unique=True, blank=True, null=True,
+                                      verbose_name='N.º de factura')
+    clave_acceso = models.CharField(max_length=49, blank=True, null=True,
+                                    verbose_name='Clave de acceso')
+    payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUS, default='PENDIENTE',
+                                      verbose_name='Estado de pago')
+    payment_method = models.CharField(max_length=15, choices=PAYMENT_METHOD, blank=True, null=True,
+                                      verbose_name='Método de pago')
+    payment_date = models.DateTimeField(blank=True, null=True, verbose_name='Fecha de pago')
     class Meta: ordering = ['-invoice_date']
     def __str__(self): return f'Invoice #{self.id} - {self.customer}'
+
+    @property
+    def is_paid(self):
+        return self.payment_status == 'PAGADA'
+
+
+class PaymentLog(models.Model):
+    """Bitácora de pagos: registra cada vez que se marca una factura como
+    pagada (quién, cuándo, con qué método y monto), para auditoría."""
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payment_logs')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='payment_logs')
+    method = models.CharField(max_length=15, choices=Invoice.PAYMENT_METHOD)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    note = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Payment Log'
+    def __str__(self): return f'Pago factura #{self.invoice_id} ({self.method}) ${self.amount}'
 
 class InvoiceDetail(models.Model):
     """Líneas de factura."""

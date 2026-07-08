@@ -1,28 +1,43 @@
 {% extends 'billing/base.html' %}
-{% block title %}Invoice #{{ invoice.id }}{% endblock %}
+{% block title %}Factura {{ invoice.numero_factura|default:invoice.id }}{% endblock %}
 {% block content %}
 
 <nav aria-label="breadcrumb">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'billing:invoice_list' %}" class="text-decoration-none"><i class="bi bi-receipt me-1"></i>Facturas</a></li>
-    <li class="breadcrumb-item active" aria-current="page">Factura #{{ invoice.id }}</li>
+    <li class="breadcrumb-item active" aria-current="page">Factura {{ invoice.numero_factura|default:invoice.id }}</li>
   </ol>
 </nav>
 
+{% with st=invoice.payment_status %}
 <div class="card border-0 shadow-sm rounded-4">
   <div class="card-header bg-dark text-white py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <h4 class="mb-0"><i class="bi bi-receipt-cutoff me-2"></i>Factura #{{ invoice.id }}</h4>
-    <span class="badge bg-light text-dark">{{ invoice.invoice_date|date:"d/m/Y H:i" }}</span>
+    <h4 class="mb-0"><i class="bi bi-receipt-cutoff me-2"></i>Factura {{ invoice.numero_factura|default:invoice.id }}</h4>
+    <span class="status-pill {% if st == 'PAGADA' %}status-on{% elif st == 'ANULADA' %}status-off{% endif %}"
+          style="{% if st == 'PENDIENTE' %}background:#fbeecb;color:#8a5b00{% elif st == 'ANULADA' %}background:#fbe4e6;color:#b02a37{% endif %}">
+      {{ invoice.get_payment_status_display|upper }}
+    </span>
   </div>
   <div class="card-body p-4">
-    <div class="row mb-4">
+
+    <!-- Datos de facturación electrónica -->
+    <div class="row g-3 mb-4">
       <div class="col-md-6">
-        <p class="mb-1"><strong><i class="bi bi-person me-1"></i>Cliente:</strong> {{ invoice.customer.full_name }}</p>
-        <p class="mb-0"><strong><i class="bi bi-card-text me-1"></i>DNI/RUC:</strong> {{ invoice.customer.dni }}</p>
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-building me-1"></i>Emisor / Cliente</div>
+          <p class="mb-1"><strong><i class="bi bi-person me-1"></i>Cliente:</strong> {{ invoice.customer.full_name }}</p>
+          <p class="mb-1"><strong><i class="bi bi-card-text me-1"></i>DNI/RUC:</strong> {{ invoice.customer.dni }}</p>
+          <p class="mb-0"><strong><i class="bi bi-geo-alt me-1"></i>Dirección:</strong> {{ invoice.customer.address|default:'—' }}</p>
+        </div>
       </div>
-      <div class="col-md-6 text-md-end">
-        <p class="mb-1"><strong>Fecha:</strong> {{ invoice.invoice_date|date:"d/m/Y H:i" }}</p>
-        <p class="mb-0"><strong>N° Factura:</strong> {{ invoice.id }}</p>
+      <div class="col-md-6">
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-upc-scan me-1"></i>Comprobante electrónico</div>
+          <p class="mb-1"><strong>N.º factura:</strong> {{ invoice.numero_factura|default:'—' }}</p>
+          <p class="mb-1"><strong>Fecha emisión:</strong> {{ invoice.invoice_date|date:"d/m/Y H:i" }}</p>
+          <p class="mb-0"><strong>Clave de acceso:</strong><br>
+            <code class="small" style="word-break:break-all">{{ invoice.clave_acceso|default:'—' }}</code></p>
+        </div>
       </div>
     </div>
 
@@ -64,10 +79,78 @@
         </tfoot>
       </table>
     </div>
+
+    <!-- Estado de pago + bitácora -->
+    <div class="row g-3 mt-1">
+      <div class="col-md-5">
+        <div class="p-3 rounded-3 border h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-cash-coin me-1"></i>Pago</div>
+          <p class="mb-1"><strong>Estado:</strong> {{ invoice.get_payment_status_display }}</p>
+          <p class="mb-1"><strong>Método:</strong> {{ invoice.get_payment_method_display|default:'—' }}</p>
+          <p class="mb-0"><strong>Fecha de pago:</strong> {{ invoice.payment_date|date:"d/m/Y H:i"|default:'—' }}</p>
+        </div>
+      </div>
+      <div class="col-md-7">
+        <div class="p-3 rounded-3 border h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-clock-history me-1"></i>Bitácora de pagos</div>
+          {% for log in invoice.payment_logs.all %}
+          <div class="d-flex justify-content-between align-items-center small py-1 border-bottom">
+            <span><i class="bi bi-check-circle text-success me-1"></i>{{ log.get_method_display }} — ${{ log.amount }}</span>
+            <span class="text-muted">{{ log.created_at|date:"d/m/Y H:i" }}{% if log.user %} · {{ log.user.username }}{% endif %}</span>
+          </div>
+          {% empty %}
+          <p class="text-muted small mb-0 fst-italic">Aún no hay pagos registrados.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
   </div>
   <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
     <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+    <a href="{% url 'billing:invoice_pdf' invoice.pk %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF</a>
+    {% if st != 'PAGADA' %}
+    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#payModal"><i class="bi bi-cash-coin me-1"></i>Marcar como pagado</button>
+    {% endif %}
     <a href="{% url 'billing:invoice_delete' invoice.pk %}" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Eliminar</a>
   </div>
 </div>
+
+<!-- Modal: marcar como pagado -->
+{% if st != 'PAGADA' %}
+<div class="modal fade" id="payModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{% url 'billing:invoice_mark_paid' invoice.pk %}">
+        {% csrf_token %}
+        <div class="modal-header bg-dark text-white">
+          <h5 class="modal-title"><i class="bi bi-cash-coin me-2"></i>Registrar pago</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Factura <strong>{{ invoice.numero_factura }}</strong> · Total <strong>${{ invoice.total }}</strong></p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Método de pago</label>
+            <select name="payment_method" class="form-select" required>
+              <option value="" disabled selected>Selecciona…</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="tarjeta">Tarjeta</option>
+            </select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label fw-semibold">Nota (opcional)</label>
+            <input type="text" name="note" class="form-control" maxlength="200" placeholder="Referencia, comprobante, etc.">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Confirmar pago</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endwith %}
 {% endblock %}
