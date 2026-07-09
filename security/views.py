@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User, Group, Permission
@@ -55,7 +57,18 @@ class UserCreateView(AdminOnlyMixin, CreateView):
     form_class = UserCreateForm
     template_name = 'security/user_form.html'
     success_url = reverse_lazy('security:user_list')
-    extra_context = {'title': 'Create User'}
+    extra_context = {'title': 'Nuevo usuario'}
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # Datos de los clientes vinculables para que el template autollene
+        # Nombre/Apellidos/Email al elegir uno (rol Cliente).
+        ctx['customers_json'] = json.dumps({
+            str(c.pk): {'first_name': c.first_name, 'last_name': c.last_name,
+                        'email': c.email or ''}
+            for c in ctx['form'].fields['customer'].queryset
+        })
+        return ctx
 
     def form_valid(self, form):
         # A propósito NO se llama a login() aquí: quien crea la cuenta es el
@@ -77,7 +90,7 @@ class UserUpdateView(AdminOnlyMixin, UpdateView):
     form_class = UserUpdateForm
     template_name = 'security/user_form.html'
     success_url = reverse_lazy('security:user_list')
-    extra_context = {'title': 'Edit User'}
+    extra_context = {'title': 'Editar usuario'}
 
 class UserDeleteView(AdminOnlyMixin, DeleteView):
     model = User

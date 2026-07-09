@@ -1,17 +1,60 @@
 {% extends 'billing/base.html' %}
-{% block title %}{{ title|default:'Edit User' }}{% endblock %}
+{% block title %}{{ title|default:'Usuario' }}{% endblock %}
+{% block extra_head %}
+<style>
+  /* La lista de roles del form de edición (CheckboxSelectMultiple) viene como
+     <ul> plano: se estiliza como tarjetitas marcables. */
+  .field-wrap ul{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:.5rem}
+  .field-wrap ul li label{display:flex; align-items:center; gap:.5rem; border:1px solid var(--line-2); border-radius:10px; padding:.5rem .7rem; cursor:pointer; font-weight:500}
+  .field-wrap ul li label:has(input:checked){background:var(--c-primary-050); border-color:#b9c3f0}
+</style>
+{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6">
-    <h2>{{ title|default:'Edit User' }}</h2>
-    <form method="post">
-      {% csrf_token %}
-      {{ form.as_p }}
-      <button type="submit" class="btn btn-primary">Save</button>
-      <a href="{% url 'security:user_list' %}" class="btn btn-secondary">Cancel</a>
-    </form>
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-person-plus"></i></span>{{ title|default:'Usuario' }}</h2>
+  </div>
+  <div class="page-head-actions">
+    <a href="{% url 'security:user_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i>Volver</a>
   </div>
 </div>
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+          {% if form.non_field_errors %}
+          <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+          <div class="row g-3">
+            {% for field in form.visible_fields %}
+            <div class="{% if field.name == 'first_name' or field.name == 'last_name' or field.name == 'password1' or field.name == 'password2' %}col-md-6{% else %}col-12{% endif %} field-wrap">
+              {% if field.name == 'auto_password' or field.name == 'is_active' %}
+              <div class="form-check mt-1">
+                {{ field }}
+                <label class="form-check-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              </div>
+              {% else %}
+              <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% endif %}
+              {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
+              {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          <div class="d-flex gap-2 justify-content-end mt-4 pt-3" style="border-top:1px solid var(--line-2)">
+            <a href="{% url 'security:user_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   // Solo aplica en el formulario de creación (Edit User no tiene este campo).
@@ -24,7 +67,7 @@
     var auto = autoCheckbox.checked;
     [pass1, pass2].forEach(function (el) {
       el.disabled = auto;
-      var wrapper = el.closest('p') || el.parentElement;
+      var wrapper = el.closest('.field-wrap') || el.parentElement;
       wrapper.style.display = auto ? 'none' : '';
     });
   }
@@ -38,10 +81,51 @@
   var customerSelect = document.getElementById('id_customer');
   if (!roleSelect || !customerSelect) return;
 
+  var CUSTOMERS = {{ customers_json|default:'{}'|safe }};
+
+  // --- Buscador del selector: filtra opciones por nombre/cédula/email ---
+  // (las opciones ya traen "Apellido, Nombre — cédula — email")
+  var searchInput = document.createElement('input');
+  searchInput.type = 'text';
+  searchInput.className = 'form-control';
+  searchInput.placeholder = 'Buscar por nombre, cédula o email…';
+  searchInput.style.marginBottom = '.4rem';
+  searchInput.setAttribute('aria-label', 'Buscar cliente');
+  customerSelect.parentElement.insertBefore(searchInput, customerSelect);
+
+  var allOptions = Array.prototype.slice.call(customerSelect.options);
+  searchInput.addEventListener('input', function () {
+    var q = this.value.trim().toLowerCase();
+    var selected = customerSelect.value;
+    customerSelect.innerHTML = '';
+    allOptions.forEach(function (opt) {
+      if (!opt.value || !q || opt.text.toLowerCase().indexOf(q) !== -1) {
+        customerSelect.appendChild(opt);
+      }
+    });
+    // conserva la selección si sigue visible; si no, vuelve al placeholder
+    customerSelect.value = selected;
+    if (customerSelect.selectedIndex === -1) customerSelect.selectedIndex = 0;
+  });
+
+  // --- Autollenado: al elegir cliente se rellenan Nombre/Apellidos/Email ---
+  // (editables después; la contraseña temporal y el correo de bienvenida
+  // dependen de estos campos, por eso conviene que salgan del registro real)
+  customerSelect.addEventListener('change', function () {
+    var data = CUSTOMERS[this.value];
+    if (!data) return;
+    var first = document.getElementById('id_first_name');
+    var last = document.getElementById('id_last_name');
+    var email = document.getElementById('id_email');
+    if (first) first.value = data.first_name;
+    if (last) last.value = data.last_name;
+    if (email) email.value = data.email;
+  });
+
   function syncCustomer() {
     var opt = roleSelect.selectedOptions[0];
     var isCliente = !!opt && opt.text.trim() === 'Cliente';
-    var wrapper = customerSelect.closest('p') || customerSelect.parentElement;
+    var wrapper = customerSelect.closest('.field-wrap') || customerSelect.parentElement;
     wrapper.style.display = isCliente ? '' : 'none';
     if (!isCliente) customerSelect.value = '';
   }

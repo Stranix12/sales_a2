@@ -1790,3 +1790,24 @@ Humo bajo DEBUG=False del flujo completo de compra. El fallo de humo
 inicial fue un artefacto del test client (`follow=True` no propaga
 `secure=True`, añadiendo un 301 http→https al final de la cadena), no un
 bug de la app.
+
+---
+
+# Alta de usuarios: buscador de cliente, autollenado y rediseño del formulario
+
+- El selector "Cliente vinculado" ahora muestra **"Apellido, Nombre — cédula
+  — email"** y tiene un **buscador en vivo** que filtra por cualquiera de los
+  tres (imprescindible cuando hay muchos clientes).
+- Al elegir el cliente, **Nombre/Apellidos/Email se autollenan** desde su
+  registro (editables después). No es solo comodidad: la contraseña temporal
+  se genera del nombre/apellido y el correo de bienvenida va al email — 
+  tomarlos del registro real elimina errores de tipeo donde más duelen.
+  (`UserCreateView.get_context_data` expone `customers_json`; el JS del
+  template hace el resto. Sin librerías externas.)
+- El formulario de usuario (crear y editar comparten template) se rediseñó
+  al patrón premium: page-head, tarjeta, campos en grilla (nombre/apellido y
+  contraseñas a dos columnas), y los roles del form de edición como
+  tarjetitas marcables en vez del <ul> plano. Títulos en español.
+
+Verificado: suite 64/64 (test nuevo del label enriquecido + JSON + buscador)
+y render de crear/editar bajo DEBUG=False.

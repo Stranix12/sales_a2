@@ -493,6 +493,15 @@ class ClienteUserCreationTests(TestCase):
         self.assertFalse(User.objects.filter(username='cli_nuevo').exists())
         self.assertIn('Solo las cuentas con rol Cliente', r.content.decode())
 
+    def test_form_trae_datos_para_busqueda_y_autollenado(self):
+        """El selector muestra 'Apellido, Nombre — cédula — email' (para el
+        buscador) y la página incluye el JSON de autollenado."""
+        c = Client(); c.force_login(self.admin)
+        html = c.get('/security/users/create/').content.decode()
+        self.assertIn(f'Torres, Ana — {self.customer.dni}', html)   # label enriquecido
+        self.assertIn('"first_name": "Ana"', html)                  # customers_json
+        self.assertIn('Buscar por nombre', html)                    # buscador JS
+
 
 # =====================================================================
 # Tienda del portal: catálogo + carrito en sesión + checkout

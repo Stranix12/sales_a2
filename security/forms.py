@@ -40,7 +40,7 @@ class UserCreateForm(UserCreationForm):
     role = forms.ModelChoiceField(
         queryset=Group.objects.all(),
         required=True,
-        label='Role',
+        label='Rol',
         empty_label='-- Select a role --',
     )
     auto_password = forms.BooleanField(
@@ -64,6 +64,11 @@ class UserCreateForm(UserCreationForm):
         for f in self.fields:
             self.fields[f].widget.attrs['class'] = 'form-control'
         self.fields['auto_password'].widget.attrs['class'] = 'form-check-input'
+        # La opción muestra apellido, nombre, cédula y email para que el
+        # buscador del template pueda filtrar por cualquiera de ellos.
+        self.fields['customer'].label_from_instance = (
+            lambda c: f'{c.last_name}, {c.first_name} — {c.dni}' + (f' — {c.email}' if c.email else '')
+        )
         # No son obligatorios a nivel de widget: si se marca "automática",
         # se llenan solos en clean(); si no, clean() exige que se hayan escrito.
         self.fields['password1'].required = False
