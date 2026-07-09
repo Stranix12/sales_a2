@@ -1371,3 +1371,47 @@ ecuatoriano y un flujo de cobro, **sin ninguna conexión real al SRI**.
 
 **PayPal** (bonus) se conectará aquí como un método de pago más en el flujo de
 "Marcar como pagado".
+
+---
+
+# PayPal (Sandbox, simulado — sin dinero real)
+
+Botón **"Pagar con PayPal"** en el detalle de factura, alternativo a "Marcar
+como pagado" (que es manual: efectivo/transferencia/tarjeta). No se usa
+``paypalrestsdk`` (deprecado por PayPal) sino la **Orders API v2** directa con
+``requests`` — dos llamadas por operación (OAuth2 client-credentials + la
+operación en sí).
+
+## Configuración (Sandbox gratis, sin verificación de identidad)
+1. Crear cuenta gratis en https://developer.paypal.com
+2. Sandbox → Apps & Credentials → Create App
+3. Copiar **Client ID** y **Secret** (Sandbox)
+4. Definir en el entorno (local y/o Render): `PAYPAL_CLIENT_ID`,
+   `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE=sandbox` (default).
+5. Si faltan las credenciales, el botón se muestra **deshabilitado** con un
+   tooltip ("PayPal no está configurado en este servidor") — la página nunca
+   se rompe por no tener PayPal configurado.
+
+> Pasar a producción real es **solo cambiar variables de entorno**
+> (`PAYPAL_MODE=live` + credenciales Live) — `billing/paypal.py` no cambia.
+
+## Flujo (`billing/paypal.py` + vistas en `billing/views.py`)
+1. `invoice_paypal_start` (POST): crea la orden en PayPal por el total de la
+   factura y redirige (302) al link de aprobación.
+2. El usuario aprueba con una cuenta de prueba Sandbox (PayPal la genera
+   junto con las credenciales del paso anterior, en *Sandbox → Accounts*).
+3. PayPal redirige a `invoice_paypal_return` con `?token=<order_id>`; se
+   captura el pago (`capture_order`). Si el estado es `COMPLETED`, se
+   reutiliza `_apply_payment()` (la misma función que "Marcar como pagado")
+   para poner la factura en PAGADA, registrar el `PaymentLog` (con el
+   order/capture ID de PayPal en la nota) y reenviar el comprobante por
+   correo.
+4. Si el usuario cancela en PayPal, `invoice_paypal_cancel` no toca la
+   factura (sigue PENDIENTE).
+5. Doble pago bloqueado: si la factura ya está PAGADA, ninguna de las tres
+   vistas vuelve a llamar a PayPal.
+
+Verificado con pruebas E2E **mockeadas** (sin tocar la red real de PayPal):
+sin configurar → botón deshabilitado y error amigable; con credenciales
+falsas + `requests.post` mockeado → create→approve→capture→PAGADA con
+bitácora correcta; cancelar → sin cambios; doble pago → bloqueado.

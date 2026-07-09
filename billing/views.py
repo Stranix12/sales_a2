@@ -18,6 +18,7 @@ from .forms import (BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
 from .mixins import ExportListMixin
 from .electronic import asignar_datos_electronicos
 from .invoice_export import invoice_pdf_response
+from . import paypal
 from shared.mixins import StaffRequiredMixin
 from shared.decorators import audit_action
 from shared.emails import send_invoice_email
@@ -514,10 +515,13 @@ def invoice_create(request):
 def invoice_detail(request, pk):
     """Muestra el detalle completo de una factura."""
     invoice = get_object_or_404(
-        Invoice.objects.select_related('customer').prefetch_related('details__product'),
+        Invoice.objects.select_related('customer').prefetch_related('details__product', 'payment_logs__user'),
         pk=pk,
     )
-    return render(request, 'billing/invoice_detail.html', {'invoice': invoice})
+    return render(request, 'billing/invoice_detail.html', {
+        'invoice': invoice,
+        'paypal_configured': paypal.is_configured(),
+    })
 
 @login_required
 def invoice_pdf(request, pk):
@@ -527,10 +531,23 @@ def invoice_pdf(request, pk):
     return invoice_pdf_response(invoice)
 
 
+def _apply_payment(invoice, user, method, note=''):
+    """Marca la factura como PAGADA, registra la bitácora (PaymentLog) y
+    reenvía el comprobante por correo. Común a pago manual y PayPal."""
+    invoice.payment_status = 'PAGADA'
+    invoice.payment_method = method
+    invoice.payment_date = timezone.now()
+    invoice.save(update_fields=['payment_status', 'payment_method', 'payment_date'])
+    PaymentLog.objects.create(
+        invoice=invoice, user=user, method=method, amount=invoice.total, note=note[:200],
+    )
+    send_invoice_email(invoice)  # reenvía el comprobante (ahora PAGADA) con el PDF
+
+
 @login_required
 def invoice_mark_paid(request, pk):
-    """Marca una factura como PAGADA: guarda método/fecha, registra la bitácora
-    (PaymentLog) y reenvía el comprobante por correo. Solo por POST."""
+    """Marca una factura como PAGADA con un método manual (efectivo,
+    transferencia, tarjeta). Solo por POST."""
     invoice = get_object_or_404(Invoice, pk=pk)
     if request.method != 'POST':
         return redirect('billing:invoice_detail', pk=pk)
@@ -540,20 +557,73 @@ def invoice_mark_paid(request, pk):
 
     method = request.POST.get('payment_method')
     valid_methods = dict(Invoice.PAYMENT_METHOD)
-    if method not in valid_methods:
+    if method not in valid_methods or method == 'paypal':
         messages.error(request, 'Selecciona un método de pago válido.')
         return redirect('billing:invoice_detail', pk=pk)
 
-    invoice.payment_status = 'PAGADA'
-    invoice.payment_method = method
-    invoice.payment_date = timezone.now()
-    invoice.save(update_fields=['payment_status', 'payment_method', 'payment_date'])
-    PaymentLog.objects.create(
-        invoice=invoice, user=request.user, method=method, amount=invoice.total,
-        note=request.POST.get('note', '')[:200],
-    )
-    send_invoice_email(invoice)  # reenvía el comprobante (ahora PAGADA) con el PDF
+    _apply_payment(invoice, request.user, method, note=request.POST.get('note', ''))
     messages.success(request, f'Factura {invoice.numero_factura} marcada como pagada ({valid_methods[method]}).')
+    return redirect('billing:invoice_detail', pk=pk)
+
+
+@login_required
+def invoice_paypal_start(request, pk):
+    """Crea la orden en PayPal (Sandbox) y redirige al usuario a aprobarla."""
+    invoice = get_object_or_404(Invoice, pk=pk)
+    if request.method != 'POST':
+        return redirect('billing:invoice_detail', pk=pk)
+    if invoice.payment_status == 'PAGADA':
+        messages.info(request, f'La factura {invoice.numero_factura} ya estaba pagada.')
+        return redirect('billing:invoice_detail', pk=pk)
+    if not paypal.is_configured():
+        messages.error(request, 'PayPal no está configurado en este servidor todavía.')
+        return redirect('billing:invoice_detail', pk=pk)
+
+    try:
+        order_id, approve_url = paypal.create_order(invoice, request)
+    except paypal.PayPalError as exc:
+        messages.error(request, str(exc))
+        return redirect('billing:invoice_detail', pk=pk)
+
+    request.session[f'paypal_order_{invoice.pk}'] = order_id
+    return redirect(approve_url)
+
+
+@login_required
+def invoice_paypal_return(request, pk):
+    """PayPal redirige aquí tras la aprobación del usuario; se captura el pago."""
+    invoice = get_object_or_404(Invoice, pk=pk)
+    order_id = request.GET.get('token') or request.session.get(f'paypal_order_{invoice.pk}')
+    if invoice.payment_status == 'PAGADA':
+        messages.info(request, f'La factura {invoice.numero_factura} ya estaba pagada.')
+        return redirect('billing:invoice_detail', pk=pk)
+    if not order_id:
+        messages.error(request, 'No se recibió la orden de PayPal.')
+        return redirect('billing:invoice_detail', pk=pk)
+
+    try:
+        status, capture_id = paypal.capture_order(order_id)
+    except paypal.PayPalError as exc:
+        messages.error(request, str(exc))
+        return redirect('billing:invoice_detail', pk=pk)
+
+    if status != 'COMPLETED':
+        messages.error(request, f'PayPal no completó el pago (estado: {status}).')
+        return redirect('billing:invoice_detail', pk=pk)
+
+    _apply_payment(invoice, request.user, 'paypal',
+                   note=f'PayPal order {order_id} / capture {capture_id}')
+    request.session.pop(f'paypal_order_{invoice.pk}', None)
+    messages.success(request, f'Pago con PayPal confirmado para la factura {invoice.numero_factura}.')
+    return redirect('billing:invoice_detail', pk=pk)
+
+
+@login_required
+def invoice_paypal_cancel(request, pk):
+    """El usuario canceló el pago en PayPal: no se toca la factura."""
+    invoice = get_object_or_404(Invoice, pk=pk)
+    request.session.pop(f'paypal_order_{invoice.pk}', None)
+    messages.info(request, 'Pago con PayPal cancelado. La factura sigue pendiente.')
     return redirect('billing:invoice_detail', pk=pk)
 
 

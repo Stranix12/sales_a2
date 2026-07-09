@@ -204,3 +204,11 @@ EMPRESA = {
     'establecimiento': '001',
     'punto_emision': '001',
 }
+
+# PayPal (Sandbox por defecto): pago simulado, sin dinero real. Para producción
+# solo hace falta cambiar PAYPAL_MODE=live y usar credenciales Live reales;
+# el código no cambia. Client ID/Secret se sacan gratis en
+# https://developer.paypal.com -> Sandbox -> Apps & Credentials.
+PAYPAL_CLIENT_ID = os.environ.get('PAYPAL_CLIENT_ID', '')
+PAYPAL_CLIENT_SECRET = os.environ.get('PAYPAL_CLIENT_SECRET', '')
+PAYPAL_MODE = os.environ.get('PAYPAL_MODE', 'sandbox')  # 'sandbox' o 'live'
