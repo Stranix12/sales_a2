@@ -1454,3 +1454,27 @@ Verificado: sin stock negativo, facturas con número/clave electrónica,
 distribuidas en los últimos 6 meses, ~70% marcadas como pagadas con su
 `PaymentLog`, y 3 corridas seguidas confirmando que la segunda y tercera no
 agregan nada nuevo.
+
+---
+
+# Unificación de listados premium
+
+Los 6 listados que aún usaban la tabla estándar de Bootstrap (`table-dark`,
+`table-striped`) se migraron al mismo patrón premium de Productos/Usuarios/
+Permisos: `.page-head` (ícono + título + chip de conteo), `.filter-card`,
+`.data-table` con `.row-actions` (íconos que aparecen al pasar el mouse) y
+`.status-pill` para estados. Sin cambios de vistas/URLs — solo plantillas.
+
+- **Brands, Categorías, Proveedores, Clientes, Facturas**: ya usaban
+  `ExportListMixin` (paginación + selector de columnas + export PDF/Excel);
+  solo se les cambió el envoltorio visual, reutilizando el `_column_selector.html`
+  compartido en vez de duplicar el modal inline.
+- **Clientes**: la columna "Nombres" ahora muestra avatar con inicial +
+  nombre completo + email (mismo patrón `cell-media`/`cell-avatar` de Usuarios).
+- **Compras**: es una vista FBV simple sin `ExportListMixin` (ni paginación ni
+  selector de columnas); se mantuvo así — solo se restyled visualmente
+  (`page-head`, `filter-card`, `data-table`, `row-actions` con los botones de
+  exportar PDF/Excel por fila que ya existían).
+
+Verificado: las 6 páginas renderizan bajo `DEBUG=False`, los filtros y el
+selector de columnas siguen funcionando, `collectstatic` sin errores.
