@@ -32,13 +32,18 @@ SECRET_KEY = os.environ.get(
     'SECRET_KEY', 'django-insecure-k!hmq*6lt9vzzh!_-3a+tu1w9yb=p*_4-o^#$uzos)u81zv^$s'
 )
 
+# Render inyecta el hostname público del servicio en esta variable, así que
+# su sola presencia ya nos dice "esto corre en Render" sin depender de que
+# alguien recuerde configurar DEBUG=False a mano en el dashboard.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+# Si DEBUG no está definido explícitamente: en Render (detectado arriba) el
+# default es False (falla seguro); en local sigue siendo True como siempre.
+_debug_default = 'False' if RENDER_EXTERNAL_HOSTNAME else 'True'
+DEBUG = os.environ.get('DEBUG', _debug_default) == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-
-# Render inyecta el hostname público del servicio en esta variable.
-RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
     CSRF_TRUSTED_ORIGINS = [f'https://{RENDER_EXTERNAL_HOSTNAME}']

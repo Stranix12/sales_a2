@@ -1478,3 +1478,78 @@ Permisos: `.page-head` (ícono + título + chip de conteo), `.filter-card`,
 
 Verificado: las 6 páginas renderizan bajo `DEBUG=False`, los filtros y el
 selector de columnas siguen funcionando, `collectstatic` sin errores.
+
+---
+
+# Mejoras de integridad: validadores, DEBUG seguro, concurrencia, permisos reales y tests
+
+Auditoría pedida explícitamente por el usuario ("¿qué mejorarías para que sea
+un proyecto íntegro?"). Se confirmaron 5 huecos reales (no especulación,
+verificados leyendo el código) y se corrigieron los 4 que el usuario priorizó.
+
+## 1. Validadores faltantes en el modelo
+`InvoiceDetail.quantity`/`unit_price` y `Product.stock`/`unit_price` no tenían
+`MinValueValidator` (a diferencia de `PurchaseDetail`, que sí). El HTML
+`min=` del formulario es solo cosmético; sin el validador de modelo, el admin
+de Django o un POST crudo podían guardar cantidades/precios negativos.
+Migración `billing/0003` (aditiva, sin cambios de esquema real).
+
+## 2. `DEBUG` seguro por defecto
+Antes: `DEBUG = os.environ.get('DEBUG', 'True') == 'True'` — si alguna vez se
+olvida configurar `DEBUG=False` en un nuevo entorno de Render, la app corre
+en modo debug en producción (expone stack traces, `SECRET_KEY`, etc.). Ahora
+se usa `RENDER_EXTERNAL_HOSTNAME` (que Render ya inyecta automáticamente)
+para saber "esto corre en Render" y el *default* pasa a `False` ahí, sin
+tocar el comportamiento local (sigue en `True` por defecto, como siempre,
+porque no hay `.env` local).
+
+## 3. Condición de carrera en el stock al vender
+`invoice_create` validaba `cantidad <= stock` y luego restaba en dos pasos
+separados, sin bloqueo — dos ventas del mismo producto en simultáneo podían
+leer el mismo stock "viejo", pasar ambas la validación, y dejar el stock
+negativo. Se envolvió el flujo en `transaction.atomic()` con
+`Product.objects.select_for_update()`: la segunda venta espera a que la
+primera termine y revalida contra el stock ya actualizado. El envío de
+correo se sacó de la transacción (no tiene sentido retener el lock de fila
+durante una llamada HTTP externa).
+
+## 4. Permisos reales por rol (antes eran decorativos)
+Se confirmó que **todas** las vistas solo usaban `login_required` — el
+sistema de Roles/Permisos (`setup_roles.py`) existía pero no se aplicaba en
+ningún lado; cualquier usuario logueado (sin importar su rol) podía entrar
+directo a cualquier URL. Además, los `DeleteView` usaban `StaffRequiredMixin`
+(`is_staff`) en vez de permisos reales, y `purchase_delete` no tenía
+protección alguna.
+
+- CBVs: `PermissionRequiredMixin` con `permission_required = 'app.codename'`
+  (su comportamiento por defecto ya distingue anónimo→redirige a login vs.
+  autenticado-sin-permiso→403, confirmado leyendo el código fuente de
+  `AccessMixin.handle_no_permission`).
+- FBVs: se apila `@login_required` + `@permission_required('app.codename',
+  raise_exception=True)` (el decorador de función, a diferencia del mixin de
+  CBV, no distingue por sí solo anónimo vs. autenticado).
+- Se detectó y corrigió un hueco en la definición de roles: "Analista de
+  Compras" no tenía **ningún** permiso de `purchasing` a pesar del nombre —
+  se le agregó `view/add/change/delete_purchase` y `view/add/change_purchasedetail`
+  en `setup_roles.py` (si no, aplicar permisos reales lo hubiera dejado sin
+  poder usar Compras, que es justamente su rol).
+
+**Importante para producción**: después de este despliegue hay que volver a
+correr `python manage.py setup_roles` en el Shell de Render (el mismo
+comando ya usado antes) para que el rol "Analista de Compras" reciba los
+permisos de compras nuevos — si no, ese rol quedará bloqueado de `/purchases/`
+hasta que se corra.
+
+## 5. Suite de tests automatizada
+`billing/tests.py` y `purchasing/tests.py` estaban vacíos (scaffold por
+defecto de Django). Se escribieron 34 tests reales (`python manage.py test`):
+validadores de modelo, cédula ecuatoriana, generación de número/clave de
+factura electrónica, creación de facturas (stock, líneas repetidas del mismo
+producto, stock insuficiente), pago manual y PayPal (mockeado, sin red real),
+bitácora de pagos, restricción de compras duplicadas, y — lo más importante —
+permisos reales verificados para los 3 roles + anónimo + superusuario.
+
+Verificado: `manage.py test` (34/34, toda la suite del proyecto),
+`collectstatic`, sin migraciones faltantes, y las páginas ya construidas
+(dashboard, listados premium, facturación electrónica, PayPal) siguen
+funcionando igual para el superusuario tras aplicar los permisos reales.

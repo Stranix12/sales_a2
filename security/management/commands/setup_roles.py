@@ -15,12 +15,14 @@ ROLES = {
         'view_product',
     ],
 
-    # El Analista de Compras gestiona el catálogo completo
+    # El Analista de Compras gestiona el catálogo completo y las compras
     'Analista de Compras': [
         'view_brand', 'add_brand', 'change_brand', 'delete_brand',
         'view_productgroup', 'add_productgroup', 'change_productgroup', 'delete_productgroup',
         'view_supplier', 'add_supplier', 'change_supplier', 'delete_supplier',
         'view_product', 'add_product', 'change_product', 'delete_product',
+        'view_purchase', 'add_purchase', 'change_purchase', 'delete_purchase',
+        'view_purchasedetail', 'add_purchasedetail', 'change_purchasedetail',
     ],
 }
 

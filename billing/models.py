@@ -1,5 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from shared.validators import validate_cedula_ec
 
@@ -52,8 +53,9 @@ class Product(models.Model):
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='products')
     group = models.ForeignKey(ProductGroup, on_delete=models.PROTECT, related_name='products')
     suppliers = models.ManyToManyField(Supplier, related_name='products', blank=True)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
-    stock = models.IntegerField(default=0)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2,
+                                     validators=[MinValueValidator(Decimal('0.01'))])
+    stock = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -157,8 +159,9 @@ class InvoiceDetail(models.Model):
     """Líneas de factura."""
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='details')
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='invoice_details')
-    quantity = models.IntegerField(default=1)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    quantity = models.IntegerField(default=1, validators=[MinValueValidator(1)])
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2,
+                                     validators=[MinValueValidator(Decimal('0.01'))])
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     def __str__(self): return f'{self.product.name} x {self.quantity}'
     def save(self, *args, **kwargs):

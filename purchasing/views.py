@@ -2,7 +2,7 @@ from decimal import Decimal
 from django.db.models import F, Avg, Sum
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from billing.models import Product
 from .models import Purchase, PurchaseDetail
 from .forms import PurchaseForm, PurchaseDetailFormSet, PurchaseFilterForm
@@ -10,6 +10,7 @@ from .exports import export_purchase_excel, export_purchase_pdf
 
 
 @login_required
+@permission_required('purchasing.view_purchase', raise_exception=True)
 def purchase_list(request):
     """Reto 3: filtra por proveedor y por rango de fechas / año."""
     purchases = Purchase.objects.select_related('supplier')
@@ -38,6 +39,7 @@ def purchase_list(request):
 
 
 @login_required
+@permission_required('purchasing.add_purchase', raise_exception=True)
 def purchase_create(request):
     if request.method == 'POST':
         form = PurchaseForm(request.POST)
@@ -71,6 +73,7 @@ def purchase_create(request):
 
 
 @login_required
+@permission_required('purchasing.view_purchase', raise_exception=True)
 def purchase_detail(request, pk):
     purchase = get_object_or_404(
         Purchase.objects.select_related('supplier').prefetch_related('details__product'),
@@ -80,6 +83,7 @@ def purchase_detail(request, pk):
 
 
 @login_required
+@permission_required('purchasing.view_purchase', raise_exception=True)
 def purchase_export_pdf(request, pk):
     """Exporta una compra individual a PDF (cabecera + líneas)."""
     purchase = get_object_or_404(
@@ -90,6 +94,7 @@ def purchase_export_pdf(request, pk):
 
 
 @login_required
+@permission_required('purchasing.view_purchase', raise_exception=True)
 def purchase_export_excel(request, pk):
     """Exporta una compra individual a Excel (cabecera + líneas)."""
     purchase = get_object_or_404(
@@ -100,6 +105,7 @@ def purchase_export_excel(request, pk):
 
 
 @login_required
+@permission_required('purchasing.view_purchase', raise_exception=True)
 def purchase_report(request):
     """Reto 4: costo promedio de compra por producto."""
     report = (
@@ -112,6 +118,7 @@ def purchase_report(request):
 
 
 @login_required
+@permission_required('purchasing.delete_purchase', raise_exception=True)
 def purchase_delete(request, pk):
     purchase = get_object_or_404(Purchase, pk=pk)
     if request.method == 'POST':
