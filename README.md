@@ -1616,3 +1616,43 @@ Verificado: `manage.py test` (40/40, ahora si la suite completa real),
 los 3 grupos, Vendedor solo Ventas, Analista de Compras solo Compras,
 anónimo solo ve Login), consola de Roles sigue con su layout de alto
 completo, y las 10 páginas clave renderizan bajo `DEBUG=False`.
+
+---
+
+# Fix: error 500 al guardar producto con imagen + KPIs clickeables
+
+## Error 500 con imagen (bug real, reproducido y con test de regresión)
+Guardar un producto **con** imagen daba error 500; sin imagen guardaba bien.
+Causa raíz reproducida localmente:
+
+```
+InvalidStorageError: Could not find config for 'default' in settings.STORAGES.
+```
+
+Al configurar Whitenoise se definió `STORAGES = {'staticfiles': ...}` a mano
+— y definir ese dict **reemplaza por completo** el default de Django, que
+también trae la clave `'default'` (el storage de archivos subidos). Sin esa
+clave, cualquier `ImageField`/`FileField` revienta al guardar. Fix: declarar
+las dos claves (`default` → `FileSystemStorage`, `staticfiles` → Whitenoise).
+
+Arreglo relacionado: el helper `static()` de `config/urls.py` solo sirve
+`/media/` con `DEBUG=True`, así que en Render las imágenes subidas daban 404
+aunque se guardaran. Se reemplazó por `re_path('^media/...', serve)` que
+funciona también en producción (suficiente para este proyecto, sin S3).
+
+> Nota Render (plan free): el disco es **efímero** — las imágenes subidas se
+> pierden en cada deploy/reinicio. Para persistencia real haría falta un
+> storage externo (S3/Cloudinary). Para la demo académica es aceptable.
+
+Test de regresión: `ProductImageUploadTests` (sube un PNG real generado con
+Pillow y verifica que el producto quede con `image` en `products/`).
+
+## KPIs del dashboard clickeables
+Las 4 tarjetas (Ingresos, Facturas, Productos, Clientes) ahora son `<a>` que
+llevan a su sección (Ingresos y Facturas → `/invoices/`, Productos →
+`/products/`, Clientes → `/customers/`), con CSS para que no se vean como
+link (heredan color, sin subrayado; el hover de elevación ya existía).
+
+Verificado: suite completa 41/41, `collectstatic`, y bajo `DEBUG=False`
+(condiciones de Render): producto con imagen guarda, su URL `/media/...`
+responde 200, y los tiles enlazan correctamente.

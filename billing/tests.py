@@ -176,6 +176,37 @@ class InvoiceCreateViewTests(TestCase):
         self.assertEqual(self.product.stock, 20)
 
 
+class ProductImageUploadTests(TestCase):
+    """Regresión del error 500 al guardar un producto con imagen: definir
+    STORAGES a mano (para Whitenoise) reemplaza el dict completo de Django,
+    y sin la clave 'default' cualquier subida revienta con
+    InvalidStorageError. Este test crea un producto con imagen real."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, _, _, _ = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_img', 'a@a.com', 'pass12345')
+
+    def test_crear_producto_con_imagen_no_da_500(self):
+        import io
+        from PIL import Image as PILImage
+        buf = io.BytesIO()
+        PILImage.new('RGB', (10, 10), 'red').save(buf, format='PNG')
+        buf.seek(0)
+        buf.name = 'test_upload.png'
+
+        client = Client()
+        client.force_login(self.admin)
+        r = client.post('/products/create/', {
+            'name': 'Producto con imagen', 'brand': self.brand.pk, 'group': self.group.pk,
+            'unit_price': '5.00', 'stock': '3', 'is_active': 'on', 'image': buf,
+        }, follow=True)
+        self.assertEqual(r.status_code, 200)
+        product = Product.objects.get(name='Producto con imagen')
+        self.assertTrue(product.image.name.startswith('products/'))
+        product.image.delete(save=False)  # no dejar el archivo de prueba en media/
+
+
 # =====================================================================
 # Pagos: manual y PayPal (mockeado, sin red real)
 # =====================================================================

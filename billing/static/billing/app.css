@@ -668,6 +668,8 @@ tr:hover .act-btn{opacity:1}
   transition:transform .18s ease, box-shadow .18s ease;
 }
 .stat-tile:hover{transform:translateY(-3px); box-shadow:var(--sh)}
+/* Los tiles ahora son <a> (llevan a su sección): que no se vean como link */
+a.stat-tile, a.stat-tile:hover{color:inherit; text-decoration:none}
 .stat-ico{width:52px; height:52px; border-radius:14px; display:inline-flex; align-items:center; justify-content:center; font-size:1.5rem; color:#fff; flex:0 0 auto; box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
 .stat-ico-a{background:linear-gradient(135deg,#5468d8,#33459b)}
 .stat-ico-b{background:linear-gradient(135deg,#22b56d,#12864b)}

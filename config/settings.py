@@ -183,7 +183,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# OJO: definir STORAGES reemplaza POR COMPLETO el default de Django (que trae
+# 'default' + 'staticfiles'). Si se omite 'default', cualquier subida de
+# archivos (ImageField de Product) revienta con InvalidStorageError (error 500
+# al guardar un producto con imagen). Por eso se declaran las DOS claves.
 STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },

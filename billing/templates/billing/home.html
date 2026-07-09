@@ -14,43 +14,43 @@
   </div>
 </div>
 
-<!-- KPIs -->
+<!-- KPIs (cada tarjeta lleva a su sección) -->
 <div class="row g-3 mb-4">
   <div class="col-6 col-lg-3">
-    <div class="stat-tile">
+    <a class="stat-tile" href="{% url 'billing:invoice_list' %}" title="Ver facturas">
       <span class="stat-ico stat-ico-a"><i class="bi bi-cash-stack"></i></span>
       <div class="stat-meta">
         <div class="stat-value js-count" data-count="{{ revenue|stringformat:'f' }}" data-money="1">$0.00</div>
         <div class="stat-label">Ingresos</div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-3">
-    <div class="stat-tile">
+    <a class="stat-tile" href="{% url 'billing:invoice_list' %}" title="Ver facturas">
       <span class="stat-ico stat-ico-b"><i class="bi bi-receipt"></i></span>
       <div class="stat-meta">
         <div class="stat-value js-count" data-count="{{ total_invoices }}">0</div>
         <div class="stat-label">Facturas</div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-3">
-    <div class="stat-tile">
+    <a class="stat-tile" href="{% url 'billing:product_list' %}" title="Ver productos">
       <span class="stat-ico stat-ico-c"><i class="bi bi-box-seam"></i></span>
       <div class="stat-meta">
         <div class="stat-value js-count" data-count="{{ total_products }}">0</div>
         <div class="stat-label">Productos</div>
       </div>
-    </div>
+    </a>
   </div>
   <div class="col-6 col-lg-3">
-    <div class="stat-tile">
+    <a class="stat-tile" href="{% url 'billing:customer_list' %}" title="Ver clientes">
       <span class="stat-ico stat-ico-d"><i class="bi bi-people"></i></span>
       <div class="stat-meta">
         <div class="stat-value js-count" data-count="{{ total_customers }}">0</div>
         <div class="stat-label">Clientes</div>
       </div>
-    </div>
+    </a>
   </div>
 </div>
 
