@@ -77,7 +77,7 @@ def home(request):
     u = request.user
     if (u.is_authenticated and getattr(u, 'customer_account', None)
             and not u.is_superuser and not u.groups.exclude(name='Cliente').exists()):
-        return redirect('billing:portal_invoices')
+        return redirect('billing:portal_catalog')
 
     money = ExpressionWrapper(F('unit_price') * F('stock'), output_field=DecimalField())
 

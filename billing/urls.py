@@ -4,7 +4,13 @@ from . import portal_views
 app_name = 'billing'
 urlpatterns = [
 # Portal del Cliente (rol "Cliente": row-level, solo SUS datos)
-path('portal/', portal_views.portal_invoice_list, name='portal_invoices'),
+path('portal/', portal_views.portal_catalog, name='portal_catalog'),
+path('portal/carrito/', portal_views.portal_cart, name='portal_cart'),
+path('portal/carrito/agregar/<int:pk>/', portal_views.portal_cart_add, name='portal_cart_add'),
+path('portal/carrito/actualizar/<int:pk>/', portal_views.portal_cart_update, name='portal_cart_update'),
+path('portal/carrito/quitar/<int:pk>/', portal_views.portal_cart_remove, name='portal_cart_remove'),
+path('portal/checkout/', portal_views.portal_checkout, name='portal_checkout'),
+path('portal/facturas/', portal_views.portal_invoice_list, name='portal_invoices'),
 path('portal/facturas/<int:pk>/', portal_views.portal_invoice_detail, name='portal_invoice_detail'),
 path('portal/facturas/<int:pk>/pdf/', portal_views.portal_invoice_pdf, name='portal_invoice_pdf'),
 path('portal/facturas/<int:pk>/paypal/start/', portal_views.portal_paypal_start, name='portal_paypal_start'),

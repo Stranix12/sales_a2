@@ -379,7 +379,7 @@ class CustomerPortalTests(TestCase):
         self.client.force_login(self.user_ana)
 
     def test_mis_facturas_solo_muestra_las_propias(self):
-        r = self.client.get('/portal/')
+        r = self.client.get('/portal/facturas/')
         self.assertEqual(r.status_code, 200)
         html = r.content.decode()
         self.assertIn(f'/portal/facturas/{self.inv_ana.pk}/', html)
@@ -492,3 +492,103 @@ class ClienteUserCreationTests(TestCase):
                             customer=self.customer.pk)
         self.assertFalse(User.objects.filter(username='cli_nuevo').exists())
         self.assertIn('Solo las cuentas con rol Cliente', r.content.decode())
+
+
+# =====================================================================
+# Tienda del portal: catálogo + carrito en sesión + checkout
+# =====================================================================
+class PortalShopTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        # producto extra inactivo: no debe aparecer en el catálogo
+        cls.inactive = Product.objects.create(
+            name='Producto Oculto', brand=cls.brand, group=cls.group,
+            unit_price=Decimal('4.00'), stock=9, is_active=False)
+
+        cls.user = User.objects.create_user('shopper', password='pass12345')
+        cls.user.groups.add(Group.objects.get(name='Cliente'))
+        cls.customer.user = cls.user
+        cls.customer.save(update_fields=['user'])
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_catalogo_muestra_solo_activos(self):
+        r = self.client.get('/portal/')
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertIn('Producto X', html)
+        self.assertNotIn('Producto Oculto', html)
+
+    def test_busqueda_del_catalogo(self):
+        r = self.client.get('/portal/?q=Marca X')
+        self.assertIn('Producto X', r.content.decode())
+        r2 = self.client.get('/portal/?q=zzz-no-existe')
+        self.assertIn('coincide', r2.content.decode())
+
+    def test_agregar_al_carrito_y_badge(self):
+        self.client.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': '3'})
+        r = self.client.get('/portal/carrito/')
+        self.assertContains(r, 'Producto X')
+        self.assertEqual(self.client.session['cart'][str(self.product.pk)], 3)
+
+    def test_agregar_mas_que_stock_se_limita(self):
+        self.client.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': '999'})
+        self.assertEqual(self.client.session['cart'][str(self.product.pk)], 20)  # stock
+
+    def test_actualizar_y_quitar_del_carrito(self):
+        self.client.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': '2'})
+        self.client.post(f'/portal/carrito/actualizar/{self.product.pk}/', {'qty': '5'})
+        self.assertEqual(self.client.session['cart'][str(self.product.pk)], 5)
+        self.client.post(f'/portal/carrito/quitar/{self.product.pk}/')
+        self.assertNotIn(str(self.product.pk), self.client.session['cart'])
+
+    def test_checkout_crea_factura_descuenta_stock_y_limpia_carrito(self):
+        self.client.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': '4'})
+        r = self.client.post('/portal/checkout/', follow=True)
+
+        invoice = Invoice.objects.get(customer=self.customer)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 16)                    # 20 - 4
+        self.assertEqual(invoice.subtotal, Decimal('40.00'))
+        self.assertEqual(invoice.total, Decimal('46.00'))           # + IVA 15%
+        self.assertEqual(invoice.payment_status, 'PENDIENTE')
+        self.assertIsNotNone(invoice.numero_factura)                # electrónica
+        self.assertEqual(len(invoice.clave_acceso), 49)
+        self.assertEqual(self.client.session['cart'], {})           # carrito limpio
+        # aterriza en el detalle de SU factura (donde está el botón PayPal)
+        self.assertEqual(r.redirect_chain[-1][0], f'/portal/facturas/{invoice.pk}/')
+
+    def test_checkout_con_stock_insuficiente_no_compra_nada(self):
+        # se agrega al tope del stock y luego el stock baja (compró otro)
+        self.client.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': '20'})
+        Product.objects.filter(pk=self.product.pk).update(stock=2)
+        r = self.client.post('/portal/checkout/', follow=True)
+        self.assertEqual(Invoice.objects.filter(customer=self.customer).count(), 0)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, 2)                     # intacto
+        self.assertIn('insuficiente', r.content.decode().lower())
+        # el carrito NO se limpia: el cliente puede ajustar cantidades
+        self.assertEqual(self.client.session['cart'][str(self.product.pk)], 20)
+
+    def test_checkout_con_carrito_vacio_redirige(self):
+        r = self.client.post('/portal/checkout/', follow=True)
+        self.assertIn('vacío', r.content.decode())
+        self.assertEqual(Invoice.objects.filter(customer=self.customer).count(), 0)
+
+    def test_producto_desactivado_se_retira_del_carrito(self):
+        self.client.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': '2'})
+        Product.objects.filter(pk=self.product.pk).update(is_active=False)
+        r = self.client.get('/portal/carrito/')
+        self.assertIn('ya no están disponibles', r.content.decode())
+        self.assertEqual(self.client.session['cart'], {})
+
+    def test_usuario_interno_no_accede_a_la_tienda(self):
+        vendedor = User.objects.create_user('vend_shop', password='pass12345')
+        vendedor.groups.add(Group.objects.get(name='Vendedor'))
+        c = Client(); c.force_login(vendedor)
+        r = c.get('/portal/', follow=True)
+        self.assertIn('no está vinculado', r.content.decode())

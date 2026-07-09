@@ -1,0 +1,97 @@
+{% extends 'billing/base.html' %}
+{% block title %}Mi carrito{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-cart3"></i></span>Mi carrito</h2>
+    <span class="count-chip"><i class="bi bi-hash"></i>{{ lines|length }} producto{{ lines|length|pluralize:"s" }}</span>
+  </div>
+  <div class="page-head-actions">
+    <a href="{% url 'billing:portal_catalog' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i>Seguir comprando</a>
+  </div>
+</div>
+
+{% if lines %}
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="data-table table-fade">
+      <div class="table-scroll">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th style="width:150px">Cantidad</th>
+              <th class="text-end">Precio unit.</th>
+              <th class="text-end">Subtotal</th>
+              <th class="text-end">Quitar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in lines %}
+            <tr>
+              <td>
+                <div class="cell-media">
+                  {% if line.product.image %}
+                  <img src="{{ line.product.image.url }}" alt="" class="cell-thumb">
+                  {% else %}
+                  <span class="cell-thumb cell-thumb-empty"><i class="bi bi-image"></i></span>
+                  {% endif %}
+                  <div>
+                    <div class="cell-primary">{{ line.product.name }}</div>
+                    <div class="cell-sub">{{ line.product.brand.name }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <form method="post" action="{% url 'billing:portal_cart_update' line.product.pk %}" class="d-flex gap-1">
+                  {% csrf_token %}
+                  <input type="number" name="qty" value="{{ line.qty }}" min="1" max="{{ line.product.stock }}"
+                         class="form-control shop-qty" aria-label="Cantidad">
+                  <button type="submit" class="act-btn act-edit" title="Actualizar cantidad"><i class="bi bi-arrow-repeat"></i></button>
+                </form>
+              </td>
+              <td class="text-end">${{ line.product.unit_price }}</td>
+              <td class="text-end"><span class="fw-semibold">${{ line.subtotal }}</span></td>
+              <td class="text-end">
+                <form method="post" action="{% url 'billing:portal_cart_remove' line.product.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="act-btn act-del" title="Quitar del carrito"><i class="bi bi-trash"></i></button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-body p-4">
+        <div class="text-muted small text-uppercase fw-semibold mb-3"><i class="bi bi-receipt me-1"></i>Resumen del pedido</div>
+        <div class="d-flex justify-content-between mb-2"><span class="text-muted">Subtotal</span><span class="fw-semibold">${{ subtotal|floatformat:2 }}</span></div>
+        <div class="d-flex justify-content-between mb-2"><span class="text-muted">IVA (15%)</span><span class="fw-semibold">${{ tax|floatformat:2 }}</span></div>
+        <hr>
+        <div class="d-flex justify-content-between mb-3"><span class="fw-bold fs-5">Total</span><span class="fw-bold fs-5">${{ total|floatformat:2 }}</span></div>
+        <form method="post" action="{% url 'billing:portal_checkout' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary w-100 py-2">
+            <i class="bi bi-bag-check me-1"></i>Finalizar compra
+          </button>
+        </form>
+        <p class="text-muted small mt-3 mb-0">
+          <i class="bi bi-info-circle me-1"></i>Al finalizar se genera tu factura electrónica
+          y podrás pagarla con PayPal o en el local.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="empty-state">
+  <i class="bi bi-cart-x"></i>Tu carrito está vacío.
+  <div class="mt-3"><a href="{% url 'billing:portal_catalog' %}" class="btn btn-primary"><i class="bi bi-shop me-1"></i>Ir al catálogo</a></div>
+</div>
+{% endif %}
+{% endblock %}

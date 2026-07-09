@@ -44,6 +44,9 @@
             <i class="bi bi-person-circle"></i><span>Mi cuenta</span><i class="bi bi-chevron-down sidebar-caret"></i>
           </button>
           <div class="sidebar-submenu">
+            <a class="sidebar-sublink" href="{% url 'billing:portal_catalog' %}"><i class="bi bi-shop"></i>Catálogo</a>
+            <a class="sidebar-sublink" href="{% url 'billing:portal_cart' %}"><i class="bi bi-cart3"></i>Mi carrito
+              {% if cart_count %}<span class="cart-badge">{{ cart_count }}</span>{% endif %}</a>
             <a class="sidebar-sublink" href="{% url 'billing:portal_invoices' %}"><i class="bi bi-receipt-cutoff"></i>Mis facturas</a>
             <a class="sidebar-sublink" href="{% url 'billing:portal_profile' %}"><i class="bi bi-person-vcard"></i>Mis datos</a>
           </div>

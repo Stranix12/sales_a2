@@ -1743,3 +1743,50 @@ pago PayPal del portal (mockeado) deja PAGADA + PaymentLog con el usuario
 del cliente; alta de usuario Cliente exige/aplica el vínculo; usuario
 interno sin vínculo no entra al portal. Humo bajo DEBUG=False: login de
 cliente aterriza en el portal, sidebar correcto, superusuario intacto.
+
+---
+
+# Fase 2: Tienda del portal (catálogo + carrito + checkout)
+
+El cliente ahora compra directamente desde su portal: catálogo → carrito →
+checkout que genera su factura electrónica, lista para pagar con PayPal.
+
+## Piezas
+- **Catálogo** (`/portal/`, nuevo aterrizaje del cliente al iniciar sesión;
+  "Mis facturas" se movió a `/portal/facturas/`): tarjetas con imagen,
+  marca/categoría, precio, badges de "Agotado"/"¡Últimas N!", cantidad y
+  "Agregar al carrito". Solo productos activos; búsqueda por
+  nombre/marca/categoría.
+- **Carrito en sesión** (`{product_id: cantidad}` — sin modelos nuevos ni
+  migración): página con actualizar/quitar y resumen (Subtotal + IVA 15% +
+  Total), y badge de conteo en el sidebar vía context processor
+  (`billing/context_processors.py::cart_badge`).
+- **Checkout** (`/portal/checkout/`): mismo patrón blindado que
+  `invoice_create` — `transaction.atomic` + `select_for_update` sobre los
+  productos, validación contra el stock bloqueado, **todo-o-nada** (si una
+  línea falla, no se compra nada y el carrito queda intacto para ajustar).
+  Crea la factura PENDIENTE del cliente logueado con número + clave de
+  acceso electrónicos, descuenta stock, envía el correo con PDF (fuera de
+  la transacción) y aterriza en el detalle de la factura, donde vive el
+  botón "Pagar con PayPal" de la Fase 1.
+
+## Decisiones de seguridad/robustez
+- El precio SIEMPRE se lee del producto en BD al momento (la sesión solo
+  guarda ids y cantidades — nada manipulable del lado del navegador).
+- Cantidades limitadas al stock al agregar y al actualizar; productos
+  desactivados/eliminados se retiran solos del carrito con aviso.
+- El parámetro `next` del "agregar al carrito" solo acepta rutas internas
+  (empiezan con `/`) — nunca redirige a otro dominio.
+- Descuento de stock al hacer checkout (factura PENDIENTE), consistente
+  con el flujo interno del vendedor.
+
+## Verificación
+10 tests nuevos (suite completa 63/63): catálogo solo activos, búsqueda,
+tope de stock al agregar, actualizar/quitar, checkout feliz (factura
+electrónica + stock + carrito limpio + aterrizaje en el detalle), checkout
+con stock insuficiente no compra nada y conserva el carrito, carrito vacío,
+producto desactivado se retira, y usuario interno sin vínculo no accede.
+Humo bajo DEBUG=False del flujo completo de compra. El fallo de humo
+inicial fue un artefacto del test client (`follow=True` no propaga
+`secure=True`, añadiendo un 301 http→https al final de la cadena), no un
+bug de la app.

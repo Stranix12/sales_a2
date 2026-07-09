@@ -7,18 +7,22 @@ por modelo), aquí el control de acceso es **por fila**: cada vista opera
 (request.user.customer_account). Por eso el rol Cliente no recibe ningún
 permiso de modelo en setup_roles.
 """
+from decimal import Decimal
 from functools import wraps
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 
 from . import paypal
+from .electronic import asignar_datos_electronicos
 from .invoice_export import invoice_pdf_response
-from .models import Customer, Invoice
+from .models import Customer, Invoice, InvoiceDetail, Product
 from .views import _apply_payment
+from shared.emails import send_invoice_email
 
 
 def customer_required(view_func):
@@ -168,3 +172,198 @@ def portal_profile(request):
         'form': form,
         'customer': request.customer,
     })
+
+
+# =====================================================================
+# Tienda: catálogo + carrito (en sesión) + checkout
+# =====================================================================
+# El carrito vive en la sesión como {product_id(str): cantidad(int)} — sin
+# modelos nuevos. Solo guarda ids y cantidades: el precio SIEMPRE se lee del
+# producto al momento (nunca se confía en datos viejos de la sesión).
+
+def _get_cart(request):
+    return request.session.get('cart') or {}
+
+
+def _save_cart(request, cart):
+    request.session['cart'] = cart
+    request.session.modified = True
+
+
+def _cart_lines(request):
+    """Líneas del carrito con datos frescos de BD. Los productos que ya no
+    existen o fueron desactivados se eliminan del carrito (con aviso)."""
+    cart = _get_cart(request)
+    products = {p.pk: p for p in
+                Product.objects.filter(pk__in=[int(k) for k in cart], is_active=True)
+                .select_related('brand')}
+    lines, stale = [], []
+    for key, qty in cart.items():
+        product = products.get(int(key))
+        if product is None:
+            stale.append(key)
+            continue
+        qty = int(qty)
+        lines.append({'product': product, 'qty': qty,
+                      'subtotal': product.unit_price * qty})
+    if stale:
+        for key in stale:
+            cart.pop(key, None)
+        _save_cart(request, cart)
+        messages.warning(request, 'Algunos productos de tu carrito ya no están disponibles y fueron retirados.')
+    subtotal = sum((l['subtotal'] for l in lines), Decimal('0'))
+    return lines, subtotal
+
+
+@customer_required
+def portal_catalog(request):
+    """Catálogo: productos activos, con búsqueda por nombre/marca/categoría."""
+    q = request.GET.get('q', '').strip()
+    products = (Product.objects.filter(is_active=True)
+                .select_related('brand', 'group').order_by('name'))
+    if q:
+        products = products.filter(
+            Q(name__icontains=q) | Q(brand__name__icontains=q) | Q(group__name__icontains=q))
+    return render(request, 'billing/portal/catalog.html', {
+        'products': products,
+        'q': q,
+    })
+
+
+@customer_required
+def portal_cart_add(request, pk):
+    if request.method != 'POST':
+        return redirect('billing:portal_catalog')
+    product = get_object_or_404(Product, pk=pk, is_active=True)
+    try:
+        qty = max(1, int(request.POST.get('qty', 1)))
+    except (TypeError, ValueError):
+        qty = 1
+
+    cart = _get_cart(request)
+    current = int(cart.get(str(pk), 0))
+    wanted = current + qty
+    if product.stock <= 0:
+        messages.error(request, f'"{product.name}" está agotado.')
+        return redirect('billing:portal_catalog')
+    if wanted > product.stock:
+        wanted = product.stock
+        messages.warning(request, f'Solo hay {product.stock} unidad(es) de "{product.name}": '
+                                  'tu carrito quedó con el máximo disponible.')
+    else:
+        messages.success(request, f'"{product.name}" agregado al carrito.')
+    cart[str(pk)] = wanted
+    _save_cart(request, cart)
+    # 'next' permite volver a donde estaba el usuario, pero solo rutas
+    # internas (que empiecen con '/'): nunca un redirect a otro dominio.
+    next_url = request.POST.get('next', '')
+    if next_url.startswith('/'):
+        return redirect(next_url)
+    return redirect('billing:portal_catalog')
+
+
+@customer_required
+def portal_cart(request):
+    lines, subtotal = _cart_lines(request)
+    tax = subtotal * Decimal('0.15')
+    return render(request, 'billing/portal/cart.html', {
+        'lines': lines,
+        'subtotal': subtotal,
+        'tax': tax,
+        'total': subtotal + tax,
+    })
+
+
+@customer_required
+def portal_cart_update(request, pk):
+    if request.method != 'POST':
+        return redirect('billing:portal_cart')
+    cart = _get_cart(request)
+    key = str(pk)
+    if key not in cart:
+        return redirect('billing:portal_cart')
+    try:
+        qty = int(request.POST.get('qty', 1))
+    except (TypeError, ValueError):
+        qty = 1
+    if qty < 1:
+        cart.pop(key, None)
+    else:
+        product = get_object_or_404(Product, pk=pk)
+        if qty > product.stock:
+            qty = product.stock or 1
+            messages.warning(request, f'Solo hay {product.stock} unidad(es) de "{product.name}".')
+        cart[key] = qty
+    _save_cart(request, cart)
+    return redirect('billing:portal_cart')
+
+
+@customer_required
+def portal_cart_remove(request, pk):
+    if request.method != 'POST':
+        return redirect('billing:portal_cart')
+    cart = _get_cart(request)
+    cart.pop(str(pk), None)
+    _save_cart(request, cart)
+    return redirect('billing:portal_cart')
+
+
+@customer_required
+def portal_checkout(request):
+    """Convierte el carrito en una factura del cliente logueado.
+
+    Mismo patrón blindado que invoice_create: transacción + select_for_update
+    sobre los productos, validación de stock contra los datos bloqueados, y
+    todo-o-nada (si una línea falla, no se compra nada). La factura nace
+    PENDIENTE: el cliente aterriza en su detalle, donde está el botón de
+    Pagar con PayPal."""
+    if request.method != 'POST':
+        return redirect('billing:portal_cart')
+    cart = _get_cart(request)
+    if not cart:
+        messages.error(request, 'Tu carrito está vacío.')
+        return redirect('billing:portal_catalog')
+
+    invoice = None
+    with transaction.atomic():
+        locked = {p.pk: p for p in
+                  Product.objects.select_for_update().filter(pk__in=[int(k) for k in cart])}
+        errors, lines = [], []
+        for key, qty in cart.items():
+            product = locked.get(int(key))
+            qty = int(qty)
+            if product is None or not product.is_active:
+                errors.append('Un producto de tu carrito ya no está disponible.')
+            elif qty > product.stock:
+                errors.append(f'Stock insuficiente para "{product.name}": '
+                              f'disponible {product.stock}, en tu carrito {qty}.')
+            elif qty >= 1:
+                lines.append((product, qty))
+
+        if errors or not lines:
+            for err in errors or ['Tu carrito está vacío.']:
+                messages.error(request, err)
+        else:
+            invoice = Invoice.objects.create(customer=request.customer)
+            subtotal = Decimal('0')
+            for product, qty in lines:
+                detail = InvoiceDetail.objects.create(
+                    invoice=invoice, product=product, quantity=qty,
+                    unit_price=product.unit_price)
+                subtotal += detail.subtotal
+                product.stock -= qty
+                product.save(update_fields=['stock'])
+            invoice.subtotal = subtotal
+            invoice.tax = subtotal * Decimal('0.15')
+            invoice.total = invoice.subtotal + invoice.tax
+            invoice.save()
+            asignar_datos_electronicos(invoice)
+
+    if invoice is None:
+        return redirect('billing:portal_cart')
+
+    send_invoice_email(invoice)  # fuera de la transacción (no retiene el lock)
+    _save_cart(request, {})
+    messages.success(request, f'¡Pedido realizado! Se generó tu factura {invoice.numero_factura}. '
+                              'Puedes pagarla ahora mismo con PayPal.')
+    return redirect('billing:portal_invoice_detail', pk=invoice.pk)

@@ -1,0 +1,70 @@
+{% extends 'billing/base.html' %}
+{% block title %}Catálogo{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-shop"></i></span>Catálogo</h2>
+    <span class="count-chip"><i class="bi bi-hash"></i>{{ products|length }} producto{{ products|length|pluralize:"s" }}</span>
+  </div>
+  <div class="page-head-actions">
+    <a href="{% url 'billing:portal_cart' %}" class="btn btn-primary">
+      <i class="bi bi-cart3"></i>Mi carrito{% if cart_count %} <span class="badge bg-light text-dark ms-1">{{ cart_count }}</span>{% endif %}
+    </a>
+  </div>
+</div>
+
+<form method="get" class="filter-card">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-6">
+      <label class="form-label">Buscar</label>
+      <input type="text" name="q" value="{{ q }}" class="form-control"
+             placeholder="Nombre, marca o categoría…">
+    </div>
+    <div class="col-md-3 d-flex gap-2">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i>Buscar</button>
+      {% if q %}<a href="{% url 'billing:portal_catalog' %}" class="btn btn-outline-secondary">Limpiar</a>{% endif %}
+    </div>
+  </div>
+</form>
+
+<div class="shop-grid">
+  {% for p in products %}
+  <div class="shop-card">
+    <div class="shop-card-img">
+      {% if p.image %}
+      <img src="{{ p.image.url }}" alt="{{ p.name }}" loading="lazy">
+      {% else %}
+      <span class="shop-card-noimg"><i class="bi bi-image"></i></span>
+      {% endif %}
+      {% if p.stock <= 0 %}
+      <span class="shop-badge shop-badge-out">Agotado</span>
+      {% elif p.stock <= 5 %}
+      <span class="shop-badge shop-badge-low">¡Últimas {{ p.stock }}!</span>
+      {% endif %}
+    </div>
+    <div class="shop-card-body">
+      <div class="shop-card-brand">{{ p.brand.name }} · {{ p.group.name }}</div>
+      <div class="shop-card-name">{{ p.name }}</div>
+      <div class="shop-card-price">${{ p.unit_price }}</div>
+    </div>
+    <div class="shop-card-foot">
+      {% if p.stock > 0 %}
+      <form method="post" action="{% url 'billing:portal_cart_add' p.pk %}" class="d-flex gap-2 w-100">
+        {% csrf_token %}
+        <input type="number" name="qty" value="1" min="1" max="{{ p.stock }}" class="form-control shop-qty" aria-label="Cantidad">
+        <button type="submit" class="btn btn-primary flex-grow-1">
+          <i class="bi bi-cart-plus me-1"></i>Agregar
+        </button>
+      </form>
+      {% else %}
+      <button type="button" class="btn btn-outline-secondary w-100" disabled>Sin stock</button>
+      {% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <div class="empty-state" style="grid-column:1/-1"><i class="bi bi-shop"></i>
+    {% if q %}Ningún producto coincide con "{{ q }}".{% else %}No hay productos disponibles.{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
