@@ -196,6 +196,20 @@ STORAGES = {
     },
 }
 
+# Cloudinary (persistencia de imágenes subidas): el disco de Render free es
+# efímero (las imágenes se pierden en cada deploy/reinicio), así que en
+# producción las guardamos en Cloudinary. Se activa SOLO si CLOUDINARY_URL
+# está definida (cloudinary://api_key:api_secret@cloud_name, del dashboard de
+# Cloudinary): sin la variable, todo sigue en disco local como siempre.
+# OJO: cloudinary_storage lanza ImproperlyConfigured al importarse sin
+# credenciales — por eso la app solo se registra dentro de este if.
+# Los estáticos NO cambian: siguen con Whitenoise.
+if os.environ.get('CLOUDINARY_URL'):
+    INSTALLED_APPS += ['cloudinary_storage', 'cloudinary']
+    STORAGES['default'] = {
+        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+    }
+
 # Media files (subidas de usuario: imágenes de productos, etc.)
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

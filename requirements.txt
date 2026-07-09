@@ -2,11 +2,13 @@ asgiref==3.11.1
 asttokens==3.0.1
 certifi==2026.6.17
 charset-normalizer==3.4.7
+cloudinary==1.45.0
 colorama==0.4.6
 decorator==5.3.1
 dj-database-url==3.1.2
 Django==6.0.6
 django-anymail==15.0
+django-cloudinary-storage==0.3.0
 django-extensions==4.1
 et_xmlfile==2.0.0
 executing==2.2.1

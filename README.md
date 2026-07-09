@@ -1656,3 +1656,43 @@ link (heredan color, sin subrayado; el hover de elevación ya existía).
 Verificado: suite completa 41/41, `collectstatic`, y bajo `DEBUG=False`
 (condiciones de Render): producto con imagen guarda, su URL `/media/...`
 responde 200, y los tiles enlazan correctamente.
+
+---
+
+# Cloudinary: imágenes persistentes en producción (activación condicional)
+
+El disco de Render free es efímero → las imágenes subidas se perdían en cada
+deploy/reinicio. Ahora las imágenes de productos se guardan en **Cloudinary**
+(plan gratuito, sin tarjeta) cuando la variable `CLOUDINARY_URL` está
+definida.
+
+## Diseño a prueba de fallos
+- **Activación condicional**: `cloudinary_storage` lanza
+  `ImproperlyConfigured` con solo importarse sin credenciales, así que la app
+  solo se registra en `INSTALLED_APPS` (y solo se cambia
+  `STORAGES['default']`) dentro de un `if os.environ.get('CLOUDINARY_URL')`.
+  Sin la variable, **nada cambia**: disco local en desarrollo, y Render
+  sigue funcionando aunque la variable no exista todavía.
+- **Los estáticos no se tocan**: `STORAGES['staticfiles']` sigue con
+  Whitenoise; Cloudinary solo maneja media (imágenes subidas).
+- Compatibilidad verificada: `django-cloudinary-storage` 0.3.0 +
+  `cloudinary` 1.45.0 importan y operan bien bajo Django 6.0.
+
+## Verificación (matriz de dos escenarios)
+- **Sin `CLOUDINARY_URL`** (local / Render sin configurar): check OK, storage
+  = `FileSystemStorage`, cloudinary NO cargado, suite completa 41/41.
+- **Con `CLOUDINARY_URL`** (formato válido): check OK, storage =
+  `MediaCloudinaryStorage`, Whitenoise intacto, páginas 200, `collectstatic`
+  OK. (La subida real a la nube se prueba con las credenciales reales del
+  usuario — no se pueden falsificar.)
+
+## Activación (un solo paso del usuario)
+1. Cuenta gratis en https://cloudinary.com → el Dashboard muestra tu
+   `CLOUDINARY_URL` (formato `cloudinary://API_KEY:API_SECRET@CLOUD_NAME`).
+2. En Render → Environment → agregar `CLOUDINARY_URL` con ese valor → al
+   guardar, Render redeploya y las imágenes nuevas quedan permanentes
+   (servidas desde el CDN de Cloudinary, `res.cloudinary.com/...`).
+
+> Nota: los productos con imágenes subidas ANTES de activar Cloudinary
+> apuntan a archivos del disco efímero (ya perdidos tras el siguiente
+> deploy) — hay que resubir esas imágenes una vez, editando el producto.
