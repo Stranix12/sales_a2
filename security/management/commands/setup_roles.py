@@ -24,6 +24,12 @@ ROLES = {
         'view_purchase', 'add_purchase', 'change_purchase', 'delete_purchase',
         'view_purchasedetail', 'add_purchasedetail', 'change_purchasedetail',
     ],
+
+    # El Cliente NO recibe permisos de modelo a propósito: los permisos de
+    # Django son globales ("ver facturas" = TODAS las facturas). Su portal
+    # (/portal/...) filtra por el cliente vinculado al usuario (row-level),
+    # así que darle view_invoice le abriría las facturas de otros.
+    'Cliente': [],
 }
 
 class Command(BaseCommand):

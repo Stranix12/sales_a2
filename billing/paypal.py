@@ -56,13 +56,19 @@ def _get_access_token():
     return resp.json()['access_token']
 
 
-def create_order(invoice, request):
-    """Crea la orden por el total de la factura. Devuelve (order_id, approve_url)."""
+def create_order(invoice, request,
+                 return_urlname='billing:invoice_paypal_return',
+                 cancel_urlname='billing:invoice_paypal_cancel'):
+    """Crea la orden por el total de la factura. Devuelve (order_id, approve_url).
+
+    Los nombres de URL de retorno/cancelación son parametrizables porque el
+    flujo se usa desde dos lugares: la vista interna (vendedor/admin) y el
+    portal del cliente, cada uno con sus propias rutas."""
     token = _get_access_token()
     return_url = request.build_absolute_uri(
-        reverse('billing:invoice_paypal_return', args=[invoice.pk]))
+        reverse(return_urlname, args=[invoice.pk]))
     cancel_url = request.build_absolute_uri(
-        reverse('billing:invoice_paypal_cancel', args=[invoice.pk]))
+        reverse(cancel_urlname, args=[invoice.pk]))
     payload = {
         'intent': 'CAPTURE',
         'purchase_units': [{

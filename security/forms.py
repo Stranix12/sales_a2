@@ -5,6 +5,8 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User, Group, Permission
 
+from billing.models import Customer
+
 
 def generate_temp_password(first_name, last_name):
     """Inicial del primer nombre + primer apellido completo + inicial del
@@ -44,11 +46,18 @@ class UserCreateForm(UserCreationForm):
     auto_password = forms.BooleanField(
         required=False, initial=True, label='Generar contraseña automáticamente',
     )
+    customer = forms.ModelChoiceField(
+        queryset=Customer.objects.filter(user__isnull=True, is_active=True),
+        required=False,
+        label='Cliente vinculado',
+        empty_label='-- Selecciona el cliente --',
+        help_text='Solo para el rol Cliente: a qué cliente pertenece esta cuenta del portal.',
+    )
 
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'email', 'role',
-                  'auto_password', 'password1', 'password2']
+                  'customer', 'auto_password', 'password1', 'password2']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -77,6 +86,15 @@ class UserCreateForm(UserCreationForm):
                     'password1',
                     'Escribe una contraseña o marca "Generar automáticamente".'
                 )
+        # Rol Cliente <-> cliente vinculado: van juntos. Sin el vínculo, el
+        # portal no sabría de quién mostrar facturas; y vincular un cliente a
+        # una cuenta interna (Vendedor/Admin) mezclaría los dos mundos.
+        role = cleaned_data.get('role')
+        customer = cleaned_data.get('customer')
+        if role and role.name == 'Cliente' and not customer:
+            self.add_error('customer', 'El rol Cliente requiere elegir a qué cliente pertenece la cuenta.')
+        if customer and (not role or role.name != 'Cliente'):
+            self.add_error('customer', 'Solo las cuentas con rol Cliente se vinculan a un cliente.')
         return cleaned_data
 
     def _post_clean(self):
@@ -96,6 +114,12 @@ class UserCreateForm(UserCreationForm):
         if commit:
             # Asignar el rol elegido al nuevo usuario
             user.groups.add(self.cleaned_data['role'])
+            # Rol Cliente: vincular la cuenta con su registro de Customer
+            # (el portal filtra por este vínculo).
+            customer = self.cleaned_data.get('customer')
+            if customer:
+                customer.user = user
+                customer.save(update_fields=['user'])
         return user
 
 # === 2. EDICIÓN DE USUARIO (asignar roles) ===

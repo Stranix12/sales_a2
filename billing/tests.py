@@ -345,3 +345,150 @@ class RolePermissionTests(TestCase):
         c = Client(); c.force_login(self.admin)
         for url in ('/brands/', '/customers/', '/invoices/', '/purchases/'):
             self.assertEqual(c.get(url).status_code, 200, url)
+
+
+# =====================================================================
+# Portal del Cliente (row-level: solo SUS datos)
+# =====================================================================
+class CustomerPortalTests(TestCase):
+    """El portal /portal/ filtra por el cliente vinculado al usuario, no por
+    permisos de modelo. Lo crítico: un cliente JAMÁS ve facturas ajenas."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        cls.other_customer = Customer.objects.create(
+            dni='0926687856', first_name='Luis', last_name='Mora')
+
+        cliente_group = Group.objects.get(name='Cliente')
+        cls.user_ana = User.objects.create_user('ana_portal', password='pass12345')
+        cls.user_ana.groups.add(cliente_group)
+        cls.customer.user = cls.user_ana
+        cls.customer.save(update_fields=['user'])
+
+        # facturas: una de Ana (pendiente) y una del otro cliente
+        cls.inv_ana = Invoice.objects.create(customer=cls.customer, total=Decimal('23.00'))
+        cls.inv_other = Invoice.objects.create(customer=cls.other_customer, total=Decimal('9.00'))
+
+        cls.vendedor = User.objects.create_user('vend_portal', password='pass12345')
+        cls.vendedor.groups.add(Group.objects.get(name='Vendedor'))
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.user_ana)
+
+    def test_mis_facturas_solo_muestra_las_propias(self):
+        r = self.client.get('/portal/')
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertIn(f'/portal/facturas/{self.inv_ana.pk}/', html)
+        self.assertNotIn(f'/portal/facturas/{self.inv_other.pk}/', html)
+
+    def test_factura_ajena_da_404(self):
+        r = self.client.get(f'/portal/facturas/{self.inv_other.pk}/')
+        self.assertEqual(r.status_code, 404)
+        r_pdf = self.client.get(f'/portal/facturas/{self.inv_other.pk}/pdf/')
+        self.assertEqual(r_pdf.status_code, 404)
+
+    def test_detalle_y_pdf_de_factura_propia(self):
+        r = self.client.get(f'/portal/facturas/{self.inv_ana.pk}/')
+        self.assertEqual(r.status_code, 200)
+        r_pdf = self.client.get(f'/portal/facturas/{self.inv_ana.pk}/pdf/')
+        self.assertEqual(r_pdf.status_code, 200)
+        self.assertEqual(r_pdf['Content-Type'], 'application/pdf')
+
+    def test_home_redirige_al_portal(self):
+        r = self.client.get('/', follow=True)
+        self.assertEqual(r.redirect_chain[0][0], '/portal/')
+
+    def test_cliente_no_accede_a_secciones_internas(self):
+        for url in ('/products/create/', '/brands/', '/customers/', '/invoices/', '/purchases/'):
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+
+    def test_usuario_interno_sin_vinculo_no_entra_al_portal(self):
+        c = Client(); c.force_login(self.vendedor)
+        r = c.get('/portal/', follow=True)
+        self.assertIn('no está vinculado', r.content.decode())
+
+    def test_editar_mis_datos_contacto(self):
+        r = self.client.post('/portal/mis-datos/', {
+            'email': 'nuevo@example.com', 'phone': '0999999999', 'address': 'Calle Nueva 1',
+        }, follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.email, 'nuevo@example.com')
+        # identidad intacta (el form no expone estos campos)
+        self.assertEqual(self.customer.dni, '1710034065')
+
+    def test_pagar_mi_factura_con_paypal_mockeado(self):
+        def fake_post(url, **kwargs):
+            class R:
+                def __init__(self, data): self._data = data
+                def raise_for_status(self): pass
+                def json(self): return self._data
+            if 'oauth2/token' in url:
+                return R({'access_token': 'FAKE'})
+            if url.endswith('/v2/checkout/orders'):
+                return R({'id': 'ORD-P', 'links': [{'rel': 'approve', 'href': 'https://paypal.test/ok'}]})
+            if '/v2/checkout/orders/ORD-P/capture' in url:
+                return R({'status': 'COMPLETED',
+                          'purchase_units': [{'payments': {'captures': [{'id': 'CAP-P'}]}}]})
+            raise AssertionError(url)
+
+        with patch.object(paypal.settings, 'PAYPAL_CLIENT_ID', 'x'), \
+             patch.object(paypal.settings, 'PAYPAL_CLIENT_SECRET', 'y'), \
+             patch('billing.paypal.requests.post', side_effect=fake_post):
+            r1 = self.client.post(f'/portal/facturas/{self.inv_ana.pk}/paypal/start/')
+            self.assertEqual(r1.status_code, 302)
+            self.assertEqual(r1.url, 'https://paypal.test/ok')
+            self.client.get(f'/portal/facturas/{self.inv_ana.pk}/paypal/return/', {'token': 'ORD-P'})
+
+        self.inv_ana.refresh_from_db()
+        self.assertEqual(self.inv_ana.payment_status, 'PAGADA')
+        self.assertEqual(self.inv_ana.payment_method, 'paypal')
+        log = PaymentLog.objects.get(invoice=self.inv_ana)
+        self.assertEqual(log.user, self.user_ana)
+        self.assertIn('portal cliente', log.note)
+
+    def test_no_puede_pagar_factura_ajena_via_paypal(self):
+        with patch.object(paypal.settings, 'PAYPAL_CLIENT_ID', 'x'), \
+             patch.object(paypal.settings, 'PAYPAL_CLIENT_SECRET', 'y'):
+            r = self.client.post(f'/portal/facturas/{self.inv_other.pk}/paypal/start/')
+        self.assertEqual(r.status_code, 404)
+
+
+class ClienteUserCreationTests(TestCase):
+    """El alta de usuarios con rol Cliente exige y aplica el vínculo."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+        _, _, _, _, cls.customer = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_uc', 'a@a.com', 'pass12345')
+
+    def _post_user(self, **extra):
+        c = Client(); c.force_login(self.admin)
+        data = {'username': 'cli_nuevo', 'first_name': 'Ana', 'last_name': 'Torres Vega',
+                'email': 'cli@example.com', 'auto_password': 'on',
+                'role': Group.objects.get(name='Cliente').pk}
+        data.update(extra)
+        return c.post('/security/users/create/', data, follow=True)
+
+    def test_rol_cliente_sin_vinculo_es_rechazado(self):
+        r = self._post_user()
+        self.assertFalse(User.objects.filter(username='cli_nuevo').exists())
+        self.assertIn('requiere elegir', r.content.decode())
+
+    def test_rol_cliente_con_vinculo_crea_y_vincula(self):
+        self._post_user(customer=self.customer.pk)
+        user = User.objects.get(username='cli_nuevo')
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.user, user)
+        self.assertTrue(user.groups.filter(name='Cliente').exists())
+
+    def test_vinculo_con_rol_interno_es_rechazado(self):
+        r = self._post_user(role=Group.objects.get(name='Vendedor').pk,
+                            customer=self.customer.pk)
+        self.assertFalse(User.objects.filter(username='cli_nuevo').exists())
+        self.assertIn('Solo las cuentas con rol Cliente', r.content.decode())

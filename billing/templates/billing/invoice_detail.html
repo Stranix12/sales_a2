@@ -112,13 +112,17 @@
     {% if st != 'PAGADA' %}
     <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#payModal"><i class="bi bi-cash-coin me-1"></i>Marcar como pagado</button>
     {% if paypal_configured %}
+    <!-- "Cobrar", no "pagar": el vendedor inicia el checkout y es el CLIENTE
+         quien ingresa su cuenta PayPal (caso mostrador). El pago en línea
+         desde casa vive en el portal del cliente. -->
     <form method="post" action="{% url 'billing:invoice_paypal_start' invoice.pk %}" class="d-inline">
       {% csrf_token %}
-      <button type="submit" class="btn" style="background:#0070ba;color:#fff"><i class="bi bi-paypal me-1"></i>Pagar con PayPal</button>
+      <button type="submit" class="btn" style="background:#0070ba;color:#fff"
+              title="El cliente ingresa su cuenta PayPal para pagar esta factura"><i class="bi bi-paypal me-1"></i>Cobrar con PayPal</button>
     </form>
     {% else %}
     <button type="button" class="btn" style="background:#0070ba;color:#fff;opacity:.55;cursor:not-allowed" disabled
-            title="PayPal no está configurado en este servidor"><i class="bi bi-paypal me-1"></i>Pagar con PayPal</button>
+            title="PayPal no está configurado en este servidor"><i class="bi bi-paypal me-1"></i>Cobrar con PayPal</button>
     {% endif %}
     {% endif %}
     <a href="{% url 'billing:invoice_delete' invoice.pk %}" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Eliminar</a>

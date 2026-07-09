@@ -1,0 +1,105 @@
+{% extends 'billing/base.html' %}
+{% block title %}Factura {{ invoice.numero_factura|default:invoice.id }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'billing:portal_invoices' %}" class="text-decoration-none"><i class="bi bi-receipt me-1"></i>Mis facturas</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Factura {{ invoice.numero_factura|default:invoice.id }}</li>
+  </ol>
+</nav>
+
+{% with st=invoice.payment_status %}
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-header bg-dark text-white py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-receipt-cutoff me-2"></i>Factura {{ invoice.numero_factura|default:invoice.id }}</h4>
+    <span class="status-pill {% if st == 'PAGADA' %}status-on{% elif st == 'ANULADA' %}status-off{% endif %}"
+          style="{% if st == 'PENDIENTE' %}background:#fbeecb;color:#8a5b00{% elif st == 'ANULADA' %}background:#fbe4e6;color:#b02a37{% endif %}">
+      {{ invoice.get_payment_status_display|upper }}
+    </span>
+  </div>
+  <div class="card-body p-4">
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-person me-1"></i>Facturada a</div>
+          <p class="mb-1"><strong>{{ invoice.customer.full_name }}</strong></p>
+          <p class="mb-1"><strong>DNI/RUC:</strong> {{ invoice.customer.dni }}</p>
+          <p class="mb-0"><strong>Fecha emisión:</strong> {{ invoice.invoice_date|date:"d/m/Y H:i" }}</p>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-upc-scan me-1"></i>Comprobante electrónico</div>
+          <p class="mb-1"><strong>N.º factura:</strong> {{ invoice.numero_factura|default:'—' }}</p>
+          <p class="mb-0"><strong>Clave de acceso:</strong><br>
+            <code class="small" style="word-break:break-all">{{ invoice.clave_acceso|default:'—' }}</code></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>Producto</th>
+            <th class="text-center">Cant.</th>
+            <th class="text-end">Precio unit.</th>
+            <th class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for detail in invoice.details.all %}
+          <tr>
+            <td>{{ detail.product.name }}</td>
+            <td class="text-center">{{ detail.quantity }}</td>
+            <td class="text-end">${{ detail.unit_price }}</td>
+            <td class="text-end">${{ detail.subtotal }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted">Sin líneas de detalle.</td></tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" class="text-end fw-bold">Subtotal:</td>
+            <td class="text-end">${{ invoice.subtotal }}</td>
+          </tr>
+          <tr>
+            <td colspan="3" class="text-end fw-bold">IVA (15%):</td>
+            <td class="text-end">${{ invoice.tax }}</td>
+          </tr>
+          <tr class="table-warning">
+            <td colspan="3" class="text-end fw-bold fs-5">TOTAL:</td>
+            <td class="text-end fw-bold fs-5">${{ invoice.total }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div class="p-3 rounded-3 border mt-3" style="max-width:420px">
+      <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-cash-coin me-1"></i>Pago</div>
+      <p class="mb-1"><strong>Estado:</strong> {{ invoice.get_payment_status_display }}</p>
+      <p class="mb-1"><strong>Método:</strong> {{ invoice.get_payment_method_display|default:'—' }}</p>
+      <p class="mb-0"><strong>Fecha de pago:</strong> {{ invoice.payment_date|date:"d/m/Y H:i"|default:'—' }}</p>
+    </div>
+
+  </div>
+  <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
+    <a href="{% url 'billing:portal_invoices' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+    <a href="{% url 'billing:portal_invoice_pdf' invoice.pk %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF</a>
+    {% if st == 'PENDIENTE' %}
+      {% if paypal_configured %}
+      <form method="post" action="{% url 'billing:portal_paypal_start' invoice.pk %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn" style="background:#0070ba;color:#fff"><i class="bi bi-paypal me-1"></i>Pagar con PayPal</button>
+      </form>
+      {% else %}
+      <span class="text-muted small align-self-center"><i class="bi bi-info-circle me-1"></i>Pago en línea no disponible; puedes pagar en el local.</span>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endwith %}
+{% endblock %}

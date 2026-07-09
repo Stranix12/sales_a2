@@ -1,0 +1,49 @@
+{% extends 'billing/base.html' %}
+{% block title %}Mis datos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-person-vcard"></i></span>Mis datos</h2>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-5">
+    <div class="card h-100">
+      <div class="card-body p-4">
+        <div class="text-muted small text-uppercase fw-semibold mb-3"><i class="bi bi-person me-1"></i>Identidad</div>
+        <div class="cell-media mb-3">
+          <span class="cell-avatar">{{ customer.first_name|first|upper }}</span>
+          <div>
+            <div class="cell-primary">{{ customer.full_name }}</div>
+            <div class="cell-sub">Cliente desde {{ customer.created_at|date:'m/Y' }}</div>
+          </div>
+        </div>
+        <p class="mb-1"><strong>DNI/RUC:</strong> {{ customer.dni }}</p>
+        <p class="text-muted small mb-0 mt-3">
+          <i class="bi bi-info-circle me-1"></i>Si tu nombre o identificación cambian,
+          contacta al personal del negocio (son los datos fiscales de tus comprobantes).
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card h-100">
+      <div class="card-body p-4">
+        <div class="text-muted small text-uppercase fw-semibold mb-3"><i class="bi bi-pencil-square me-1"></i>Datos de contacto</div>
+        <form method="post">
+          {% csrf_token %}
+          {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Guardar cambios</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

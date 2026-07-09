@@ -75,6 +75,12 @@ class Product(models.Model):
 
 class Customer(models.Model):
     """Clientes. OneToOne con CustomerProfile."""
+    # Cuenta de acceso al portal (rol "Cliente"): un usuario puede estar
+    # vinculado a lo sumo a un cliente, y viceversa. Nullable porque la
+    # mayoría de los clientes son solo registros (no tienen login).
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                null=True, blank=True, related_name='customer_account',
+                                verbose_name='Usuario del portal')
     dni = models.CharField(max_length=13, unique=True, verbose_name='DNI/RUC',
                            validators=[validate_cedula_ec])
     first_name = models.CharField(max_length=100)

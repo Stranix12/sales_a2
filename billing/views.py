@@ -72,6 +72,13 @@ def home(request):
     """Dashboard: KPIs + gráficas (SVG propio) calculadas desde los modelos
     existentes (Invoice, InvoiceDetail, Product, Customer). Sin dependencias
     externas ni endpoints extra — todo se resuelve en esta vista."""
+    # Un usuario del portal (rol Cliente, sin roles internos) no debe ver el
+    # dashboard del negocio (ingresos, inventario…): su "home" es su portal.
+    u = request.user
+    if (u.is_authenticated and getattr(u, 'customer_account', None)
+            and not u.is_superuser and not u.groups.exclude(name='Cliente').exists()):
+        return redirect('billing:portal_invoices')
+
     money = ExpressionWrapper(F('unit_price') * F('stock'), output_field=DecimalField())
 
     # --- KPIs ---

@@ -31,5 +31,22 @@
   autoCheckbox.addEventListener('change', sync);
   sync();
 })();
+
+(function () {
+  // El selector "Cliente vinculado" solo tiene sentido con el rol Cliente.
+  var roleSelect = document.getElementById('id_role');
+  var customerSelect = document.getElementById('id_customer');
+  if (!roleSelect || !customerSelect) return;
+
+  function syncCustomer() {
+    var opt = roleSelect.selectedOptions[0];
+    var isCliente = !!opt && opt.text.trim() === 'Cliente';
+    var wrapper = customerSelect.closest('p') || customerSelect.parentElement;
+    wrapper.style.display = isCliente ? '' : 'none';
+    if (!isCliente) customerSelect.value = '';
+  }
+  roleSelect.addEventListener('change', syncCustomer);
+  syncCustomer();
+})();
 </script>
 {% endblock %}

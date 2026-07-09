@@ -35,6 +35,21 @@
         {% else %}
         <a class="sidebar-link" href="{% url 'billing:home' %}"><i class="bi bi-house-door"></i><span>Home</span></a>
 
+        <!-- MI CUENTA: usuarios vinculados a un cliente (rol Cliente).
+             Se usa el vínculo real (customer_account) y no has_group porque
+             el filtro devuelve True al superusuario para cualquier grupo. -->
+        {% if user.customer_account %}
+        <div class="sidebar-group" data-sidebar-group>
+          <button type="button" class="sidebar-link sidebar-group-toggle">
+            <i class="bi bi-person-circle"></i><span>Mi cuenta</span><i class="bi bi-chevron-down sidebar-caret"></i>
+          </button>
+          <div class="sidebar-submenu">
+            <a class="sidebar-sublink" href="{% url 'billing:portal_invoices' %}"><i class="bi bi-receipt-cutoff"></i>Mis facturas</a>
+            <a class="sidebar-sublink" href="{% url 'billing:portal_profile' %}"><i class="bi bi-person-vcard"></i>Mis datos</a>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- COMPRAS: Analista de Compras y Administrador -->
         {% if user|has_group:'Analista de Compras' or user|has_group:'Administrador' %}
         <div class="sidebar-group" data-sidebar-group>

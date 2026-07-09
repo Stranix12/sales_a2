@@ -1696,3 +1696,50 @@ definida.
 > Nota: los productos con imágenes subidas ANTES de activar Cloudinary
 > apuntan a archivos del disco efímero (ya perdidos tras el siguiente
 > deploy) — hay que resubir esas imágenes una vez, editando el producto.
+
+---
+
+# Fase 1: Rol "Cliente" y portal de autoservicio (/portal/)
+
+Los clientes del negocio ahora pueden tener cuenta de acceso: ven SUS
+facturas, descargan su comprobante PDF, pagan las pendientes con PayPal y
+actualizan sus datos de contacto. Fase 2 (catálogo + carrito) queda pendiente.
+
+## Diseño: permisos por fila, no por modelo
+El rol "Cliente" se crea en `setup_roles` **sin ningún permiso de Django** a
+propósito: los permisos de Django son globales por modelo ("ver facturas" =
+TODAS las facturas). El portal (`billing/portal_views.py`) controla el acceso
+por **fila**: el decorador `@customer_required` exige usuario logueado Y
+vinculado a un `Customer` (nuevo campo `Customer.user`, OneToOne nullable,
+migración `billing/0004`), y cada vista consulta solo
+`Invoice.objects.filter(customer=request.customer)`. Una factura ajena
+responde **404** (ni siquiera confirma que exista) — en lista, detalle, PDF
+y PayPal.
+
+## Piezas
+- **Portal** (`/portal/`): Mis facturas (lista con estado de pago), detalle
+  con datos del comprobante electrónico, descarga de PDF, y "Mis datos"
+  (identidad solo-lectura; contacto editable: email/teléfono/dirección).
+- **Pagar con PayPal desde el portal**: `paypal.create_order` ganó parámetros
+  `return_urlname`/`cancel_urlname` porque el flujo se usa desde dos lugares
+  (vista interna y portal, cada uno con sus rutas de retorno). Reutiliza
+  `_apply_payment` — mismo PAGADA + PaymentLog + correo con PDF.
+- **Sidebar/redirección**: grupo "Mi cuenta" en el sidebar (condición:
+  `user.customer_account`, NO `has_group`, porque ese filtro devuelve True al
+  superusuario para cualquier grupo); `home()` redirige al portal a los
+  usuarios cuyo único rol es Cliente (no deben ver los KPIs del negocio).
+- **Alta de usuarios**: `UserCreateForm` ganó el campo "Cliente vinculado"
+  (solo clientes activos sin cuenta). Reglas cruzadas: rol Cliente exige
+  vínculo; roles internos lo prohíben. El form del template muestra/oculta
+  el selector según el rol elegido (JS).
+- **Renombre**: el botón interno pasó de "Pagar con PayPal" a **"Cobrar con
+  PayPal"** (caso mostrador: el vendedor inicia el checkout y el CLIENTE
+  ingresa su cuenta). El "Pagar con PayPal" real vive en el portal.
+
+## Verificación
+12 tests nuevos (53/53 en la suite): factura ajena → 404 en
+lista/detalle/PDF/PayPal; cliente → 403 en todas las secciones internas;
+pago PayPal del portal (mockeado) deja PAGADA + PaymentLog con el usuario
+del cliente; alta de usuario Cliente exige/aplica el vínculo; usuario
+interno sin vínculo no entra al portal. Humo bajo DEBUG=False: login de
+cliente aterriza en el portal, sidebar correcto, superusuario intacto.

@@ -1,0 +1,55 @@
+{% extends 'billing/base.html' %}
+{% block title %}Mis facturas{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-receipt-cutoff"></i></span>Mis facturas</h2>
+    <span class="count-chip"><i class="bi bi-hash"></i>{{ invoices|length }} factura{{ invoices|length|pluralize:"s" }}</span>
+  </div>
+</div>
+
+{% if pendientes %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-1"></i>
+  Tienes <strong>{{ pendientes }}</strong> factura{{ pendientes|pluralize:"s" }} pendiente{{ pendientes|pluralize:"s" }} de pago.
+</div>
+{% endif %}
+
+<div class="data-table table-fade">
+  <div class="table-scroll">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>N.º Factura</th>
+          <th>Fecha</th>
+          <th class="text-end">Total</th>
+          <th>Estado</th>
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr>
+          <td><span class="cell-primary">{{ inv.numero_factura|default:inv.id }}</span></td>
+          <td><span class="cell-sub">{{ inv.invoice_date|date:'d/m/Y H:i' }}</span></td>
+          <td class="text-end"><span class="fw-semibold">${{ inv.total }}</span></td>
+          <td>
+            {% if inv.payment_status == 'PAGADA' %}<span class="status-pill status-on">Pagada</span>
+            {% elif inv.payment_status == 'ANULADA' %}<span class="status-pill" style="background:#fbe4e6;color:#b02a37">Anulada</span>
+            {% else %}<span class="status-pill" style="background:#fbeecb;color:#8a5b00">Pendiente</span>{% endif %}
+          </td>
+          <td class="row-actions">
+            <a href="{% url 'billing:portal_invoice_detail' inv.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
+            <a href="{% url 'billing:portal_invoice_pdf' inv.pk %}" class="act-btn act-edit" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">
+          <div class="empty-state"><i class="bi bi-receipt"></i>Aún no tienes facturas.</div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

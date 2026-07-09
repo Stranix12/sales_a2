@@ -1,7 +1,16 @@
-from django.urls import path 
-from . import views 
-app_name = 'billing' 
+from django.urls import path
+from . import views
+from . import portal_views
+app_name = 'billing'
 urlpatterns = [
+# Portal del Cliente (rol "Cliente": row-level, solo SUS datos)
+path('portal/', portal_views.portal_invoice_list, name='portal_invoices'),
+path('portal/facturas/<int:pk>/', portal_views.portal_invoice_detail, name='portal_invoice_detail'),
+path('portal/facturas/<int:pk>/pdf/', portal_views.portal_invoice_pdf, name='portal_invoice_pdf'),
+path('portal/facturas/<int:pk>/paypal/start/', portal_views.portal_paypal_start, name='portal_paypal_start'),
+path('portal/facturas/<int:pk>/paypal/return/', portal_views.portal_paypal_return, name='portal_paypal_return'),
+path('portal/facturas/<int:pk>/paypal/cancel/', portal_views.portal_paypal_cancel, name='portal_paypal_cancel'),
+path('portal/mis-datos/', portal_views.portal_profile, name='portal_profile'),
 # Home (Dashboard)
 path('', views.home, name='home'),
 # Brand (lista CBV + create/update/delete FBV)
