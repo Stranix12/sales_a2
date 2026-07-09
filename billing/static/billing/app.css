@@ -404,67 +404,93 @@ textarea.form-control{min-height:90px}
 .alert-warning{background:#fbeecb; border-color:#f2dea0; color:#836200}
 .alert-info{background:var(--c-primary-050); border-color:#cdd4f3; color:var(--c-primary-700)}
 
-/* ------------------------------ NAVBAR ----------------------------------- */
-.navbar{display:flex; align-items:center; padding:.6rem 0}
-.navbar-brand{display:inline-flex; align-items:center; gap:.5rem; font-size:1.12rem; font-weight:700; color:#fff; text-decoration:none}
-.navbar-brand:hover{color:#fff; text-decoration:none}
-.navbar-nav{display:flex; flex-direction:column; list-style:none; margin:0; padding:0}
-.nav-item{position:relative}
-.navbar-collapse{flex-basis:100%; flex-grow:1; align-items:center}
-.navbar-toggler{
-  margin-left:auto; padding:.4rem .6rem; background:transparent; border:1px solid rgba(255,255,255,.3);
-  border-radius:var(--r-sm); cursor:pointer; color:#fff; line-height:1;
-}
-.navbar-toggler-icon{
-  display:inline-block; width:1.4em; height:1.4em; vertical-align:middle;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath stroke='rgba(255,255,255,.85)' stroke-width='2.2' stroke-linecap='round' d='M4 8h22M4 15h22M4 22h22'/%3E%3C/svg%3E");
-  background-repeat:no-repeat; background-position:center; background-size:contain;
-}
-.collapse:not(.show){display:none}
-@media (min-width:992px){
-  .navbar-expand-lg .navbar-collapse{display:flex!important; flex-basis:auto}
-  .navbar-expand-lg .navbar-toggler{display:none}
-  .navbar-expand-lg .navbar-nav{flex-direction:row; align-items:center}
-}
+/* ------------------------------ APP SHELL / SIDEBAR ----------------------- */
+.app-shell{display:flex; align-items:flex-start; min-height:100vh}
 
-/* Tema oscuro de la barra (app-navbar) — fija arriba (feel de app) */
-.app-navbar{
-  position:sticky; top:0; z-index:1030;
-  background:linear-gradient(90deg, var(--navbar-1) 0%, #232c52 60%, #2a3465 100%);
-  box-shadow:0 2px 14px rgba(16,24,40,.28);
+.app-sidebar{
+  flex:0 0 258px; width:258px; display:flex; flex-direction:column;
+  position:sticky; top:0; height:100vh; overflow-y:auto; z-index:1030;
+  background:linear-gradient(180deg, var(--navbar-1) 0%, #232c52 55%, #2a3465 100%);
+  box-shadow:2px 0 16px rgba(16,24,40,.22);
 }
+.sidebar-brand{display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:1.15rem 1.1rem .9rem}
+.brand-link{display:inline-flex; align-items:center; gap:.6rem; font-size:1.05rem; font-weight:700; color:#fff; text-decoration:none}
+.brand-link:hover{color:#fff; text-decoration:none}
 .brand-badge{
-  width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
   border-radius:10px; background:linear-gradient(135deg,#4a5fd0,var(--c-primary-600));
   color:#fff; font-size:1.05rem; box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
 }
-.app-navbar .nav-link{
-  color:rgba(255,255,255,.8); border-radius:8px; padding:.42rem .78rem; margin:.05rem;
-  text-decoration:none; cursor:pointer; display:inline-flex; align-items:center;
+.sidebar-close{background:transparent; border:0; color:#fff; font-size:1.05rem; cursor:pointer; padding:.3rem; line-height:1}
+
+.sidebar-nav{flex:1 1 auto; padding:.35rem .75rem; display:flex; flex-direction:column; gap:.2rem}
+.sidebar-warning{color:#ffd873; font-size:.85rem; padding:.7rem .6rem; line-height:1.4}
+
+.sidebar-link{
+  display:flex; align-items:center; gap:.7rem; width:100%; padding:.62rem .75rem; border-radius:10px;
+  color:rgba(255,255,255,.82); text-decoration:none; cursor:pointer; background:transparent; border:0;
+  font:inherit; font-size:.92rem; text-align:left; transition:background-color .16s ease, color .16s ease;
+}
+.sidebar-link i:first-child{font-size:1.05rem; width:1.3rem; text-align:center; flex-shrink:0}
+.sidebar-link:hover{color:#fff; background:rgba(255,255,255,.08); text-decoration:none}
+.sidebar-link.active{color:#fff; background:rgba(255,255,255,.16); font-weight:600}
+
+.sidebar-caret{margin-left:auto; font-size:.7rem; transition:transform .18s ease; flex-shrink:0}
+.sidebar-group.open .sidebar-caret{transform:rotate(180deg)}
+.sidebar-submenu{
+  max-height:0; overflow:hidden; display:flex; flex-direction:column; gap:.1rem;
+  transition:max-height .22s ease;
+}
+.sidebar-group.open .sidebar-submenu{max-height:20rem}
+.sidebar-sublink{
+  display:flex; align-items:center; gap:.65rem; padding:.5rem .75rem .5rem 1.9rem; border-radius:9px;
+  color:rgba(255,255,255,.68); text-decoration:none; font-size:.87rem;
   transition:background-color .16s ease, color .16s ease;
 }
-.app-navbar .nav-link:hover{color:#fff; background:rgba(255,255,255,.08); text-decoration:none}
-.app-navbar .nav-link.active{color:#fff; background:rgba(255,255,255,.15); font-weight:600}
-.app-navbar .dropdown-toggle::after{
-  content:""; display:inline-block; margin-left:.4em; width:.4em; height:.4em;
-  border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor;
-  transform:rotate(45deg) translateY(-2px); opacity:.8;
-}
+.sidebar-sublink i{font-size:.92rem; width:1.1rem; text-align:center; flex-shrink:0}
+.sidebar-sublink:hover{color:#fff; background:rgba(255,255,255,.08); text-decoration:none}
+.sidebar-sublink.active{color:#fff; background:rgba(255,255,255,.15); font-weight:600}
 
-.user-chip{display:inline-flex; align-items:center; gap:.5rem; color:#fff; padding:.25rem .3rem}
+.sidebar-footer{padding:.9rem; border-top:1px solid rgba(255,255,255,.1); display:flex; flex-direction:column; gap:.4rem}
+.sidebar-footer .user-chip{background:rgba(255,255,255,.06); border-radius:10px; padding:.55rem .65rem}
+.sidebar-footer .btn-logout{justify-content:center; background:rgba(255,255,255,.06); border-radius:10px}
+.user-chip{display:flex; align-items:center; gap:.55rem; color:#fff}
+.user-chip span:last-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.88rem; font-weight:600}
 .user-avatar{
-  width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+  width:30px; height:30px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
   background:linear-gradient(135deg,#4a5fd0,var(--c-primary-600)); color:#fff; font-weight:700; font-size:.85rem;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
 }
 .btn-logout{
-  color:rgba(255,255,255,.78); border:0; background:transparent; border-radius:8px; padding:.4rem .6rem;
-  cursor:pointer; display:inline-flex; align-items:center; font:inherit;
+  color:rgba(255,255,255,.78); border:0; background:transparent; border-radius:8px; padding:.55rem .6rem;
+  cursor:pointer; display:flex; align-items:center; font:inherit; width:100%;
   transition:background-color .16s ease, color .16s ease;
 }
 .btn-logout:hover{color:#fff; background:rgba(255,255,255,.1)}
 
-/* ----------------------------- DROPDOWN ---------------------------------- */
+/* Contenido principal: ocupa lo que sobra a la derecha del sidebar */
+.app-main{flex:1 1 auto; min-width:0; display:flex; flex-direction:column}
+.app-topbar{
+  display:none; align-items:center; gap:.75rem; padding:.7rem 1rem; position:sticky; top:0; z-index:1020;
+  background:linear-gradient(90deg, var(--navbar-1) 0%, #232c52 60%, #2a3465 100%); box-shadow:0 2px 14px rgba(16,24,40,.22);
+}
+.sidebar-toggle{background:transparent; border:1px solid rgba(255,255,255,.3); color:#fff; border-radius:8px; padding:.4rem .6rem; cursor:pointer; line-height:1}
+.topbar-brand{color:#fff; font-weight:700}
+
+.sidebar-overlay{display:none; position:fixed; inset:0; background:rgba(15,20,38,.55); z-index:1025}
+
+/* En pantallas chicas el sidebar se convierte en cajón (off-canvas) */
+@media (max-width:991.98px){
+  .app-sidebar{position:fixed; top:0; left:0; transform:translateX(-100%); transition:transform .22s ease}
+  .app-sidebar.show{transform:translateX(0)}
+  .app-topbar{display:flex}
+  .sidebar-overlay.show{display:block}
+}
+@media (min-width:992px){
+  .sidebar-close{display:none}
+}
+
+/* ----------------------------- DROPDOWN (genérico) ------------------------ */
 .dropdown{position:relative}
 .dropdown-toggle{cursor:pointer}
 .dropdown-menu{
@@ -481,13 +507,6 @@ textarea.form-control{min-height:90px}
 }
 .dropdown-item:hover{background:var(--c-primary-050); color:var(--c-primary-700); text-decoration:none}
 .dropdown-divider{height:0; margin:.35rem .2rem; border-top:1px solid var(--line-2)}
-/* dropdown de la navbar en móvil: se muestra estático dentro del menú */
-@media (max-width:991.98px){
-  .app-navbar .dropdown-menu{position:static; box-shadow:none; border:0; background:rgba(255,255,255,.05);
-    margin:.15rem 0 .35rem .5rem; padding:.2rem}
-  .app-navbar .dropdown-item{color:rgba(255,255,255,.82)}
-  .app-navbar .dropdown-item:hover{background:rgba(255,255,255,.1); color:#fff}
-}
 
 /* ------------------------------ MODALES ---------------------------------- */
 /* El contenedor .modal ES la capa oscura (sin backdrop aparte): centra el
@@ -538,8 +557,11 @@ body.modal-open{overflow:hidden}
 
 /* ============================ TOASTS ====================================== */
 .toast-stack{
-  position:fixed; top:78px; right:18px; z-index:1090;
+  position:fixed; top:18px; right:18px; z-index:1090;
   display:flex; flex-direction:column; gap:.6rem; max-width:min(380px, calc(100vw - 36px));
+}
+@media (max-width:991.98px){
+  .toast-stack{top:70px} /* deja libre la topbar móvil (hamburguesa) */
 }
 .app-toast{
   position:relative; display:flex; align-items:flex-start; gap:.65rem;

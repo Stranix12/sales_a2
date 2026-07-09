@@ -1553,3 +1553,66 @@ Verificado: `manage.py test` (34/34, toda la suite del proyecto),
 `collectstatic`, sin migraciones faltantes, y las páginas ya construidas
 (dashboard, listados premium, facturación electrónica, PayPal) siguen
 funcionando igual para el superusuario tras aplicar los permisos reales.
+
+---
+
+# Sidebar izquierdo (antes navbar arriba) + recuperación de contraseña por correo
+
+## 1. Navbar → sidebar izquierdo
+Se reemplazó la barra superior por un menú lateral fijo (`.app-sidebar`, 258px,
+`position:sticky; height:100vh`), con `.app-main` ocupando el resto del ancho.
+
+- Los antiguos dropdowns "Compras/Ventas/Security" pasaron a ser **grupos
+  acordeón** (`.sidebar-group` + `.sidebar-group-toggle`, con chevron que
+  rota) en vez de menús flotantes — más natural en un layout vertical.
+- El grupo que contiene la página activa se **auto-expande** al cargar
+  (`app.js`, misma lógica que antes resaltaba el link activo, ahora también
+  agrega `.open` al grupo).
+- **Responsive**: en pantallas <992px el sidebar se vuelve un cajón
+  (off-canvas, `position:fixed` + `transform:translateX(-100%)`), con una
+  topbar delgada (`.app-topbar`, con botón hamburguesa) y overlay oscuro
+  detrás. Se cierra solo, la X, el overlay, Escape, o al hacer clic en
+  cualquier link (para no tapar la página siguiente).
+- Se actualizó el hack `:has()` de `group_console.html` (la consola de
+  Roles, que necesita llenar exactamente el alto visible): antes apuntaba a
+  `body > nav.navbar` y `body > #page-content` (hijos directos de `body`);
+  ahora apunta a `.app-main` (el nuevo contenedor a la derecha del sidebar).
+- `.dropdown`/`.dropdown-menu`/`.dropdown-item` (el componente genérico) se
+  dejaron intactos — no se usaban en ningún otro lado, pero siguen
+  disponibles por si una futura pantalla necesita un menú flotante.
+
+## 2. Recuperación de contraseña por correo
+Usa las vistas **ya incluidas** de Django (`django.contrib.auth.urls`, que
+`config/urls.py` ya montaba en `/accounts/` — no hizo falta tocar `urls.py`),
+con plantillas propias que siguen el mismo estilo que `login.html`:
+
+- `templates/registration/password_reset_form.html` — pedir el email.
+- `templates/registration/password_reset_done.html` — "revisa tu correo"
+  (mismo mensaje exista o no el email, para no filtrar qué cuentas existen).
+- `templates/registration/password_reset_confirm.html` — nueva contraseña
+  (o aviso de "enlace inválido/expirado" si `validlink` es False).
+- `templates/registration/password_reset_complete.html` — confirmación.
+- `templates/registration/password_reset_email.html` +
+  `password_reset_subject.txt` — el correo en sí (mismo tono que
+  `emails/user_welcome.txt`). Se envía con el mismo `EMAIL_BACKEND` que ya
+  usan los correos de bienvenida/factura (consola en local, Brevo en Render)
+  — sin configuración adicional.
+- Link "¿Olvidaste tu contraseña?" agregado en `login.html`.
+
+**Bug encontrado de paso**: a `security/__init__.py` le faltaba el archivo
+— la app funcionaba igual (Django la reconoce como *namespace package*),
+pero `python manage.py test` **sin argumentos** no descubría sus tests
+(`unittest`'s discovery no encuentra tests en carpetas sin `__init__.py`,
+a diferencia de Django's app loading). Con el archivo agregado, la suite
+completa pasó de encontrar 34 tests a los 40 reales.
+
+Se agregó `security/tests.py` (6 tests nuevos) cubriendo el flujo completo:
+formulario → email con link → cambiar contraseña → login con la nueva →
+el link reusado ya no funciona → email inexistente no revela nada ni
+envía correo.
+
+Verificado: `manage.py test` (40/40, ahora si la suite completa real),
+`collectstatic`, sidebar renderizado y verificado por rol (Administrador ve
+los 3 grupos, Vendedor solo Ventas, Analista de Compras solo Compras,
+anónimo solo ve Login), consola de Roles sigue con su layout de alto
+completo, y las 10 páginas clave renderizan bajo `DEBUG=False`.

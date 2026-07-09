@@ -72,13 +72,41 @@
     }
   });
 
-  /* ------------------------ COLLAPSE (navbar móvil) ---------------------- */
-  document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(function (toggle) {
-    toggle.addEventListener('click', function (e) {
-      e.preventDefault();
-      var sel = toggle.getAttribute('data-bs-target');
-      var target = sel && document.querySelector(sel);
-      if (target) target.classList.toggle('show');
+  /* ------------------------------ SIDEBAR --------------------------------- */
+  var sidebar = document.getElementById('appSidebar');
+  var overlay = document.getElementById('sidebarOverlay');
+  var openBtn = document.getElementById('sidebarToggle');
+  var closeBtn = document.getElementById('sidebarClose');
+
+  function openSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.add('show');
+    if (overlay) overlay.classList.add('show');
+  }
+  function closeSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.remove('show');
+    if (overlay) overlay.classList.remove('show');
+  }
+  if (openBtn) openBtn.addEventListener('click', openSidebar);
+  if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+  if (overlay) overlay.addEventListener('click', closeSidebar);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeSidebar();
+  });
+  // Al navegar desde el cajón móvil, se cierra solo (si no, tapa la página
+  // siguiente hasta que el usuario lo cierre a mano).
+  if (sidebar) {
+    sidebar.querySelectorAll('a.sidebar-link, a.sidebar-sublink').forEach(function (a) {
+      a.addEventListener('click', closeSidebar);
+    });
+  }
+
+  /* --------------------- GRUPOS DEL SIDEBAR (acordeón) -------------------- */
+  document.querySelectorAll('.sidebar-group-toggle').forEach(function (toggle) {
+    toggle.addEventListener('click', function () {
+      var group = toggle.closest('.sidebar-group');
+      if (group) group.classList.toggle('open');
     });
   });
 
@@ -127,7 +155,7 @@
   /* ---------------------- RESALTADO DE SECCIÓN ACTIVA -------------------- */
   var path = location.pathname;
   var best = null;
-  document.querySelectorAll('.app-navbar .nav-link[href], .app-navbar .dropdown-item[href]').forEach(function (a) {
+  document.querySelectorAll('.sidebar-link[href], .sidebar-sublink[href]').forEach(function (a) {
     var href = a.getAttribute('href');
     if (!href || href === '#') return;
     if (href === '/') { if (path === '/') best = a; return; }
@@ -135,9 +163,10 @@
   });
   if (best) {
     best.classList.add('active');
-    var dd = best.closest('.dropdown');
-    if (dd) {
-      var toggle = dd.querySelector('.nav-link.dropdown-toggle');
+    var group = best.closest('.sidebar-group');
+    if (group) {
+      group.classList.add('open');
+      var toggle = group.querySelector('.sidebar-group-toggle');
       if (toggle) toggle.classList.add('active');
     }
   }

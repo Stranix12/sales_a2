@@ -10,114 +10,128 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-<!-- Barra de navegación -->
-<nav class="navbar navbar-expand-lg navbar-dark app-navbar">
-  <div class="container-fluid px-3 px-lg-4">
-    <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'billing:home' %}">
-      <span class="brand-badge"><i class="bi bi-cart-check-fill"></i></span>
-      <span class="fw-bold">Sales System</span>
-    </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="nav">
-      <ul class="navbar-nav me-auto">
-        {% if user.is_authenticated %}
-          {% if user.security_profile.must_change_password %}
-          <!-- Contraseña temporal pendiente de cambiar: no se muestra ninguna
-               opción del sistema (el middleware las bloquea igual, pero no
-               tiene sentido mostrar links a los que no puede entrar). -->
-          <li class="nav-item"><span class="nav-link text-warning">Debes cambiar tu contraseña para continuar</span></li>
-          {% else %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'billing:home' %}"><i class="bi bi-house-door me-1"></i>Home</a></li>
+<div class="app-shell">
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-          <!-- COMPRAS: Analista de Compras y Administrador -->
-          {% if user|has_group:'Analista de Compras' or user|has_group:'Administrador' %}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-bag-check me-1"></i>Compras</a>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'billing:brand_list' %}"><i class="bi bi-tag me-2"></i>Brands</a></li>
-              <li><a class="dropdown-item" href="{% url 'billing:productgroup_list' %}"><i class="bi bi-collection me-2"></i>Groups</a></li>
-              <li><a class="dropdown-item" href="{% url 'billing:supplier_list' %}"><i class="bi bi-truck me-2"></i>Suppliers</a></li>
-              <li><a class="dropdown-item" href="{% url 'billing:product_list' %}"><i class="bi bi-box-seam me-2"></i>Products</a></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{% url 'purchasing:purchase_list' %}"><i class="bi bi-bag-plus me-2"></i>Purchases</a></li>
-            </ul>
-          </li>
-          {% endif %}
+  <!-- Menú lateral -->
+  <aside class="app-sidebar" id="appSidebar">
+    <div class="sidebar-brand">
+      <a class="brand-link" href="{% url 'billing:home' %}">
+        <span class="brand-badge"><i class="bi bi-cart-check-fill"></i></span>
+        <span>Sales System</span>
+      </a>
+      <button class="sidebar-close d-lg-none" type="button" id="sidebarClose" aria-label="Cerrar menú">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
 
-          <!-- VENTAS: Vendedor y Administrador -->
-          {% if user|has_group:'Vendedor' or user|has_group:'Administrador' %}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-receipt me-1"></i>Ventas</a>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" href="{% url 'billing:customer_list' %}"><i class="bi bi-people me-2"></i>Customers</a></li>
-              <li><a class="dropdown-item" href="{% url 'billing:invoice_list' %}"><i class="bi bi-receipt-cutoff me-2"></i>Invoices</a></li>
-            </ul>
-          </li>
-          {% endif %}
-
-          <!-- SEGURIDAD: solo Administrador -->
-          {% if user|has_group:'Administrador' %}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown"><i class="bi bi-shield-lock me-1"></i>Security</a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><a class="dropdown-item" href="{% url 'security:user_list' %}"><i class="bi bi-person-badge me-2"></i>Users</a></li>
-              <li><a class="dropdown-item" href="{% url 'security:group_list' %}"><i class="bi bi-diagram-3 me-2"></i>Roles</a></li>
-              <li><a class="dropdown-item" href="{% url 'security:permission_list' %}"><i class="bi bi-key me-2"></i>Permissions</a></li>
-            </ul>
-          </li>
-          {% endif %}
-          {% endif %}
-        {% endif %}
-      </ul>
-      <ul class="navbar-nav align-items-lg-center">
-        {% if user.is_authenticated %}
-        <li class="nav-item">
-          <span class="user-chip">
-            <span class="user-avatar">{{ user.username|first|upper }}</span>
-            <span class="d-none d-lg-inline">{{ user.username }}</span>
-          </span>
-        </li>
-        <li class="nav-item">
-          <form method="post" action="{% url 'logout' %}" class="d-inline">
-            {% csrf_token %}
-            <button type="submit" class="btn-logout" title="Cerrar sesión">
-              <i class="bi bi-box-arrow-right me-1"></i>Logout
-            </button>
-          </form>
-        </li>
+    <nav class="sidebar-nav">
+      {% if user.is_authenticated %}
+        {% if user.security_profile.must_change_password %}
+        <!-- Contraseña temporal pendiente de cambiar: no se muestra ninguna
+             opción del sistema (el middleware las bloquea igual, pero no
+             tiene sentido mostrar links a los que no puede entrar). -->
+        <div class="sidebar-warning"><i class="bi bi-exclamation-triangle me-2"></i>Debes cambiar tu contraseña para continuar</div>
         {% else %}
-        <li class="nav-item"><a class="nav-link" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right me-1"></i>Login</a></li>
+        <a class="sidebar-link" href="{% url 'billing:home' %}"><i class="bi bi-house-door"></i><span>Home</span></a>
+
+        <!-- COMPRAS: Analista de Compras y Administrador -->
+        {% if user|has_group:'Analista de Compras' or user|has_group:'Administrador' %}
+        <div class="sidebar-group" data-sidebar-group>
+          <button type="button" class="sidebar-link sidebar-group-toggle">
+            <i class="bi bi-bag-check"></i><span>Compras</span><i class="bi bi-chevron-down sidebar-caret"></i>
+          </button>
+          <div class="sidebar-submenu">
+            <a class="sidebar-sublink" href="{% url 'billing:brand_list' %}"><i class="bi bi-tag"></i>Marcas</a>
+            <a class="sidebar-sublink" href="{% url 'billing:productgroup_list' %}"><i class="bi bi-collection"></i>Categorías</a>
+            <a class="sidebar-sublink" href="{% url 'billing:supplier_list' %}"><i class="bi bi-truck"></i>Proveedores</a>
+            <a class="sidebar-sublink" href="{% url 'billing:product_list' %}"><i class="bi bi-box-seam"></i>Productos</a>
+            <a class="sidebar-sublink" href="{% url 'purchasing:purchase_list' %}"><i class="bi bi-bag-plus"></i>Compras</a>
+          </div>
+        </div>
         {% endif %}
-      </ul>
+
+        <!-- VENTAS: Vendedor y Administrador -->
+        {% if user|has_group:'Vendedor' or user|has_group:'Administrador' %}
+        <div class="sidebar-group" data-sidebar-group>
+          <button type="button" class="sidebar-link sidebar-group-toggle">
+            <i class="bi bi-receipt"></i><span>Ventas</span><i class="bi bi-chevron-down sidebar-caret"></i>
+          </button>
+          <div class="sidebar-submenu">
+            <a class="sidebar-sublink" href="{% url 'billing:customer_list' %}"><i class="bi bi-people"></i>Clientes</a>
+            <a class="sidebar-sublink" href="{% url 'billing:invoice_list' %}"><i class="bi bi-receipt-cutoff"></i>Facturas</a>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- SEGURIDAD: solo Administrador -->
+        {% if user|has_group:'Administrador' %}
+        <div class="sidebar-group" data-sidebar-group>
+          <button type="button" class="sidebar-link sidebar-group-toggle">
+            <i class="bi bi-shield-lock"></i><span>Security</span><i class="bi bi-chevron-down sidebar-caret"></i>
+          </button>
+          <div class="sidebar-submenu">
+            <a class="sidebar-sublink" href="{% url 'security:user_list' %}"><i class="bi bi-person-badge"></i>Usuarios</a>
+            <a class="sidebar-sublink" href="{% url 'security:group_list' %}"><i class="bi bi-diagram-3"></i>Roles</a>
+            <a class="sidebar-sublink" href="{% url 'security:permission_list' %}"><i class="bi bi-key"></i>Permisos</a>
+          </div>
+        </div>
+        {% endif %}
+        {% endif %}
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-footer">
+      {% if user.is_authenticated %}
+      <span class="user-chip">
+        <span class="user-avatar">{{ user.username|first|upper }}</span>
+        <span>{{ user.username }}</span>
+      </span>
+      <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn-logout" title="Cerrar sesión">
+          <i class="bi bi-box-arrow-right me-1"></i>Logout
+        </button>
+      </form>
+      {% else %}
+      <a class="sidebar-link" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right"></i><span>Login</span></a>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- Contenido principal -->
+  <div class="app-main">
+    <header class="app-topbar">
+      <button class="sidebar-toggle" type="button" id="sidebarToggle" aria-label="Abrir menú">
+        <i class="bi bi-list"></i>
+      </button>
+      <span class="topbar-brand">Sales System</span>
+    </header>
+
+    <!-- Notificaciones flotantes (Django messages): entran animadas y se
+         auto-descartan cuando su barra de progreso termina (~4.5s). -->
+    {% if messages %}
+    <div class="toast-stack">
+      {% for m in messages %}
+      <div class="app-toast toast-{{ m.level_tag|default:'info' }}" role="alert">
+        <span class="app-toast-icon">
+          {% if m.level_tag == 'success' %}<i class="bi bi-check-circle-fill"></i>
+          {% elif m.level_tag == 'error' %}<i class="bi bi-x-circle-fill"></i>
+          {% elif m.level_tag == 'warning' %}<i class="bi bi-exclamation-triangle-fill"></i>
+          {% else %}<i class="bi bi-info-circle-fill"></i>{% endif %}
+        </span>
+        <div class="app-toast-body">{{ m }}</div>
+        <button type="button" class="app-toast-close" aria-label="Cerrar">&times;</button>
+        <span class="app-toast-bar"></span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div id="page-content" class="{% block container_class %}container{% endblock %} mt-4">
+      {% block content %}{% endblock %}
     </div>
   </div>
-</nav>
-
-<!-- Notificaciones flotantes (Django messages): entran animadas y se
-     auto-descartan cuando su barra de progreso termina (~4.5s). -->
-{% if messages %}
-<div class="toast-stack">
-  {% for m in messages %}
-  <div class="app-toast toast-{{ m.level_tag|default:'info' }}" role="alert">
-    <span class="app-toast-icon">
-      {% if m.level_tag == 'success' %}<i class="bi bi-check-circle-fill"></i>
-      {% elif m.level_tag == 'error' %}<i class="bi bi-x-circle-fill"></i>
-      {% elif m.level_tag == 'warning' %}<i class="bi bi-exclamation-triangle-fill"></i>
-      {% else %}<i class="bi bi-info-circle-fill"></i>{% endif %}
-    </span>
-    <div class="app-toast-body">{{ m }}</div>
-    <button type="button" class="app-toast-close" aria-label="Cerrar">&times;</button>
-    <span class="app-toast-bar"></span>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-<!-- Contenido principal -->
-<div id="page-content" class="{% block container_class %}container{% endblock %} mt-4">
-  {% block content %}{% endblock %}
 </div>
 <script src="{% static 'billing/app.js' %}"></script>
 </body>

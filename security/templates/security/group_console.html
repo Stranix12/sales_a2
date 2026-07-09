@@ -20,22 +20,19 @@
     --rp-delete: #d64545;  --rp-delete-soft: #fbe9e9;
   }
 
-  /* La consola llena exactamente el alto que sobra bajo el navbar y el
-     título, sea cual sea (nunca hay que adivinarlo en píxeles): body se
-     vuelve una columna flex de 100vh SOLO en esta página (gracias a
-     :has(), sin tocar el layout de las demás), #page-content (de
-     base.html) se estira para llenar lo que sobra, y .rp-console hace lo
-     mismo dentro de #page-content. El scroll queda contenido dentro del
-     rail/panel, no en la página entera. */
-  body:has(.rp-console) {
+  /* La consola llena exactamente el alto que sobra bajo la topbar (móvil) y
+     el título, sea cual sea (nunca hay que adivinarlo en píxeles): .app-main
+     (de base.html, el área a la derecha del sidebar) se vuelve una columna
+     flex de 100vh SOLO en esta página (gracias a :has(), sin tocar el
+     layout de las demás), #page-content se estira para llenar lo que sobra,
+     y .rp-console hace lo mismo dentro de #page-content. El scroll queda
+     contenido dentro del rail/panel, no en la página entera. */
+  body:has(.rp-console) .app-main {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
   }
-  body:has(.rp-console) > nav.navbar {
-    flex: 0 0 auto;
-  }
-  body:has(.rp-console) > #page-content {
+  body:has(.rp-console) .app-main > #page-content {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
