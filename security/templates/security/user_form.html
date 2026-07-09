@@ -7,6 +7,22 @@
   .field-wrap ul{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:.5rem}
   .field-wrap ul li label{display:flex; align-items:center; gap:.5rem; border:1px solid var(--line-2); border-radius:10px; padding:.5rem .7rem; cursor:pointer; font-weight:500}
   .field-wrap ul li label:has(input:checked){background:var(--c-primary-050); border-color:#b9c3f0}
+
+  /* Buscador de cliente con sugerencias en vivo (combobox) */
+  .customer-combo{position:relative}
+  .combo-menu{
+    position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:1040; display:none;
+    background:var(--surface); border:1px solid var(--line-2); border-radius:12px;
+    box-shadow:var(--sh-lg); max-height:264px; overflow-y:auto; padding:.35rem;
+  }
+  .combo-menu.show{display:block}
+  .combo-item{
+    display:block; width:100%; text-align:left; background:transparent; border:0; font:inherit;
+    padding:.55rem .7rem; border-radius:8px; cursor:pointer; color:var(--ink);
+  }
+  .combo-item:hover,.combo-item.active{background:var(--c-primary-050)}
+  .combo-item mark{background:transparent; color:var(--c-primary-600); font-weight:700; padding:0}
+  .combo-empty{padding:.6rem .7rem; color:var(--ink-mut); font-size:.88rem}
 </style>
 {% endblock %}
 {% block content %}
@@ -83,30 +99,128 @@
 
   var CUSTOMERS = {{ customers_json|default:'{}'|safe }};
 
-  // --- Buscador del selector: filtra opciones por nombre/cédula/email ---
-  // (las opciones ya traen "Apellido, Nombre — cédula — email")
+  // --- Buscador con sugerencias en vivo: se escribe y aparecen los clientes
+  // que coinciden por nombre/cédula/email, como un buscador tipo Google.
+  // El <select> sigue existiendo oculto: es el valor real que envía el form
+  // (y si el navegador no ejecuta JS, se usa tal cual).
+  var options = Array.prototype.filter.call(customerSelect.options,
+                                            function (o) { return o.value; });
+
+  var combo = document.createElement('div');
+  combo.className = 'customer-combo';
+  customerSelect.parentElement.insertBefore(combo, customerSelect);
+
   var searchInput = document.createElement('input');
   searchInput.type = 'text';
   searchInput.className = 'form-control';
   searchInput.placeholder = 'Buscar por nombre, cédula o email…';
-  searchInput.style.marginBottom = '.4rem';
+  searchInput.autocomplete = 'off';
   searchInput.setAttribute('aria-label', 'Buscar cliente');
-  customerSelect.parentElement.insertBefore(searchInput, customerSelect);
+  combo.appendChild(searchInput);
 
-  var allOptions = Array.prototype.slice.call(customerSelect.options);
-  searchInput.addEventListener('input', function () {
-    var q = this.value.trim().toLowerCase();
-    var selected = customerSelect.value;
-    customerSelect.innerHTML = '';
-    allOptions.forEach(function (opt) {
-      if (!opt.value || !q || opt.text.toLowerCase().indexOf(q) !== -1) {
-        customerSelect.appendChild(opt);
-      }
+  var menu = document.createElement('div');
+  menu.className = 'combo-menu';
+  combo.appendChild(menu);
+
+  customerSelect.hidden = true;
+
+  // sin tildes y en minúsculas, para que "perez" encuentre a "Pérez"
+  function fold(s) {
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  }
+
+  var visible = [];
+  var activeIndex = -1;
+
+  function renderMenu(q) {
+    var fq = fold(q);
+    visible = options.filter(function (o) {
+      return !fq || fold(o.text).indexOf(fq) !== -1;
     });
-    // conserva la selección si sigue visible; si no, vuelve al placeholder
-    customerSelect.value = selected;
-    if (customerSelect.selectedIndex === -1) customerSelect.selectedIndex = 0;
+    menu.innerHTML = '';
+    activeIndex = -1;
+    if (!visible.length) {
+      var empty = document.createElement('div');
+      empty.className = 'combo-empty';
+      empty.textContent = 'Sin resultados para "' + q + '"';
+      menu.appendChild(empty);
+    }
+    visible.forEach(function (opt) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'combo-item';
+      var at = fq ? fold(opt.text).indexOf(fq) : -1;
+      if (at !== -1) {
+        // resalta la parte del texto que coincide con lo escrito
+        item.appendChild(document.createTextNode(opt.text.slice(0, at)));
+        var m = document.createElement('mark');
+        m.textContent = opt.text.slice(at, at + fq.length);
+        item.appendChild(m);
+        item.appendChild(document.createTextNode(opt.text.slice(at + fq.length)));
+      } else {
+        item.textContent = opt.text;
+      }
+      // mousedown (no click): así el input no pierde el foco antes de elegir
+      item.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        choose(opt);
+      });
+      menu.appendChild(item);
+    });
+    menu.classList.add('show');
+  }
+
+  function closeMenu() { menu.classList.remove('show'); }
+
+  function choose(opt) {
+    customerSelect.value = opt.value;
+    searchInput.value = opt.text;
+    closeMenu();
+    customerSelect.dispatchEvent(new Event('change'));
+  }
+
+  searchInput.addEventListener('focus', function () { renderMenu(this.value.trim()); });
+  searchInput.addEventListener('input', function () {
+    if (!this.value.trim()) customerSelect.value = ''; // borrar texto = quitar cliente
+    renderMenu(this.value.trim());
   });
+
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { closeMenu(); return; }
+    if (!menu.classList.contains('show') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      renderMenu(this.value.trim());
+      return;
+    }
+    var items = menu.querySelectorAll('.combo-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = e.key === 'ArrowDown'
+        ? (activeIndex + 1) % items.length
+        : (activeIndex - 1 + items.length) % items.length;
+      items.forEach(function (el, i) { el.classList.toggle('active', i === activeIndex); });
+      items[activeIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && menu.classList.contains('show')) {
+      // Enter elige la sugerencia activa (o la única), no envía el formulario
+      var pick = activeIndex >= 0 ? visible[activeIndex]
+               : (visible.length === 1 ? visible[0] : null);
+      if (pick) { e.preventDefault(); choose(pick); }
+    }
+  });
+
+  // Al salir del campo: o quedó un cliente elegido (se muestra su texto
+  // completo) o no quedó ninguno (se limpia lo escrito a medias, para que no
+  // parezca que hay algo seleccionado cuando no lo hay).
+  searchInput.addEventListener('blur', function () {
+    closeMenu();
+    var chosen = customerSelect.selectedOptions[0];
+    searchInput.value = (customerSelect.value && chosen) ? chosen.text : '';
+  });
+
+  // Si el form vuelve con errores de validación y ya había cliente elegido,
+  // el buscador arranca mostrándolo.
+  var initial = customerSelect.selectedOptions[0];
+  if (customerSelect.value && initial) searchInput.value = initial.text;
 
   // --- Autollenado: al elegir cliente se rellenan Nombre/Apellidos/Email ---
   // (editables después; la contraseña temporal y el correo de bienvenida
