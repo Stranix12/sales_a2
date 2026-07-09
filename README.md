@@ -1415,3 +1415,42 @@ Verificado con pruebas E2E **mockeadas** (sin tocar la red real de PayPal):
 sin configurar → botón deshabilitado y error amigable; con credenciales
 falsas + `requests.post` mockeado → create→approve→capture→PAGADA con
 bitácora correcta; cancelar → sin cambios; doble pago → bloqueado.
+
+---
+
+# Datos de prueba (`seed_demo_data`)
+
+Comando de gestión para poblar el dashboard con datos realistas: catálogo
+(marcas, grupos, proveedores, productos) + 10 clientes + facturas y compras
+repartidas en los últimos 6 meses, para que las gráficas del dashboard
+(ventas por mes, top productos, donut activos/inactivos, stock bajo) tengan
+contenido real en vez de estar en cero.
+
+```
+python manage.py seed_demo_data              # últimos 6 meses (default)
+python manage.py seed_demo_data --months 12   # opcional: repartir en más meses
+```
+
+## Diseño
+- **Catálogo idempotente** (`get_or_create`): correr el comando varias veces
+  no duplica marcas/grupos/proveedores/productos/clientes.
+- **Facturas y compras: guard de "ya se sembró"**: si ya existe alguna
+  factura de un cliente `@demo.local` (o alguna compra `DEMO-*`), el comando
+  no genera más — evita duplicar el historial en una segunda corrida. (Se
+  descubrió con una corrida de prueba doble: un umbral aproximado dejaba
+  pasar una segunda tanda porque la semilla aleatoria fija generaba
+  siempre el mismo conteo; se cambió a un guard exacto de existencia.)
+- **3 productos con stock reservado** (Nesquik, Yogurt Toni, Chocolate
+  Nestlé Crunch) quedan **excluidos** de ventas y compras generadas, para
+  que el widget "Stock bajo" del dashboard siempre tenga contenido
+  garantizado y predecible.
+- Cédulas de clientes generadas con el mismo algoritmo módulo 10 que valida
+  `shared/validators.py` (deterísticas y válidas).
+- No envía correos (evita spamear las direcciones `@demo.local` ficticias).
+- Requiere un superusuario ya creado (se usa como autor de los pagos en la
+  bitácora).
+
+Verificado: sin stock negativo, facturas con número/clave electrónica,
+distribuidas en los últimos 6 meses, ~70% marcadas como pagadas con su
+`PaymentLog`, y 3 corridas seguidas confirmando que la segunda y tercera no
+agregan nada nuevo.
