@@ -80,6 +80,22 @@ def portal_invoice_pdf(request, pk):
 
 
 @customer_required
+def portal_invoice_xml(request, pk):
+    """El cliente descarga el XML autorizado de SU factura (comprobante SRI)."""
+    from facturacion_electronica.views import xml_response
+    invoice = _own_invoice_or_404(request, pk)
+    return xml_response(invoice)
+
+
+@customer_required
+def portal_invoice_ride(request, pk):
+    """El cliente descarga el RIDE (PDF del comprobante) de SU factura."""
+    from facturacion_electronica.ride import ride_pdf_response
+    invoice = _own_invoice_or_404(request, pk)
+    return ride_pdf_response(invoice)
+
+
+@customer_required
 def portal_paypal_start(request, pk):
     """El cliente paga SU factura con PayPal (mismo flujo que el interno,
     pero con chequeo de propiedad en vez de permiso de modelo)."""

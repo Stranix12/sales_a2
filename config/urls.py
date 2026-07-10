@@ -9,6 +9,8 @@ urlpatterns = [
     path('', include('billing.urls')),
     path('purchases/', include('purchasing.urls')),
     path('security/', include('security.urls')),
+    path('creditos/', include('creditos_ventas.urls')),
+    path('facturacion/', include('facturacion_electronica.urls')),
 ]
 
 # Sirve los archivos subidos (MEDIA) también con DEBUG=False: el helper

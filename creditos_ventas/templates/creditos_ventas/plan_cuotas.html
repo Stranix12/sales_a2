@@ -1,0 +1,120 @@
+{% extends 'billing/base.html' %}
+{% block title %}Plan de cuotas — {{ titulo }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url volver_url documento.pk %}" class="text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>{{ titulo }}
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Plan de cuotas</li>
+  </ol>
+</nav>
+
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-header bg-dark text-white py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Plan de cuotas — {{ titulo }}</h4>
+    <span class="status-pill {% if documento.estado == 'PAGADA' %}status-on{% else %}{% endif %}"
+          style="{% if documento.estado == 'PENDIENTE' %}background:#fbeecb;color:#8a5b00{% endif %}">
+      {{ documento.get_estado_display|upper }}
+    </span>
+  </div>
+  <div class="card-body p-4">
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">{{ contraparte_label }}</div>
+          <p class="mb-0 fw-semibold">{{ contraparte }}</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">Total del documento</div>
+          <p class="mb-0 fw-semibold">${{ documento.total }}</p>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="p-3 rounded-3" style="background:var(--surface-2)">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">Saldo pendiente</div>
+          <p class="mb-0 fw-semibold">${{ documento.saldo }}</p>
+        </div>
+      </div>
+    </div>
+
+    <h5 class="mb-3"><i class="bi bi-list-ol me-2"></i>Cuotas</h5>
+    <div class="table-responsive mb-4">
+      <table class="table table-bordered align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th class="text-center">#</th>
+            <th>Vencimiento</th>
+            <th class="text-end">Valor</th>
+            <th class="text-end">Saldo</th>
+            <th class="text-center">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cuota in cuotas %}
+          <tr>
+            <td class="text-center">{{ cuota.numero }}</td>
+            <td>{{ cuota.fecha_vencimiento|date:'d/m/Y' }}</td>
+            <td class="text-end">${{ cuota.valor }}</td>
+            <td class="text-end fw-semibold">${{ cuota.saldo }}</td>
+            <td class="text-center">
+              {% if cuota.estado == 'PAGADA' %}<span class="status-pill status-on">Pagada</span>
+              {% else %}<span class="status-pill" style="background:#fbeecb;color:#8a5b00">Pendiente</span>{% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">Este documento no tiene un plan de cuotas (venta al contado).</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h5 class="mb-3"><i class="bi bi-clock-history me-2"></i>Historial de pagos</h5>
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle">
+        <thead class="table-secondary">
+          <tr>
+            <th>Fecha</th>
+            <th class="text-center">Cuota</th>
+            <th class="text-end">Valor</th>
+            <th>Observación</th>
+            <th class="text-center">Comprobante</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pago in pagos %}
+          <tr>
+            <td>{{ pago.fecha|date:'d/m/Y' }}</td>
+            <td class="text-center">#{{ pago.cuota.numero }}</td>
+            <td class="text-end">${{ pago.valor }}</td>
+            <td class="text-muted small">{{ pago.observacion|default:'—' }}</td>
+            <td class="text-center">
+              {% if tipo == 'venta' %}
+              <a href="{% url 'creditos_ventas:pago_cuota_venta_pdf' pago.pk %}" class="act-btn act-edit" title="Descargar comprobante"><i class="bi bi-file-earmark-pdf"></i></a>
+              {% else %}
+              <a href="{% url 'creditos_ventas:pago_cuota_compra_pdf' pago.pk %}" class="act-btn act-edit" title="Descargar comprobante"><i class="bi bi-file-earmark-pdf"></i></a>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">Aún no hay pagos registrados.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+  <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
+    <a href="{% url volver_url documento.pk %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+    {% if documento.estado != 'PAGADA' and cuotas %}
+    <a href="{% url pagar_url documento.pk %}" class="btn btn-primary"><i class="bi bi-cash-coin me-1"></i>Registrar pago</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

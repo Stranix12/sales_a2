@@ -6,16 +6,21 @@ ROLES = {
     # El Administrador recibe TODOS los permisos
     'Administrador': '__all__',
 
-    # El Vendedor gestiona clientes y facturas (y VE productos)
+    # El Vendedor gestiona clientes y facturas (y VE productos), incluyendo
+    # el crédito de ventas (cuotas de sus facturas)
     'Vendedor': [
         'view_customer', 'add_customer', 'change_customer',
         'view_customerprofile', 'add_customerprofile', 'change_customerprofile',
         'view_invoice', 'add_invoice', 'change_invoice',
         'view_invoicedetail', 'add_invoicedetail', 'change_invoicedetail',
         'view_product',
+        'view_cuotaventa', 'add_cuotaventa', 'change_cuotaventa',
+        'view_pagocuotaventa', 'add_pagocuotaventa',
+        'view_comprobanteelectronico', 'add_comprobanteelectronico', 'change_comprobanteelectronico',
     ],
 
-    # El Analista de Compras gestiona el catálogo completo y las compras
+    # El Analista de Compras gestiona el catálogo completo y las compras,
+    # incluyendo el crédito de compras (cuotas de sus compras)
     'Analista de Compras': [
         'view_brand', 'add_brand', 'change_brand', 'delete_brand',
         'view_productgroup', 'add_productgroup', 'change_productgroup', 'delete_productgroup',
@@ -23,6 +28,8 @@ ROLES = {
         'view_product', 'add_product', 'change_product', 'delete_product',
         'view_purchase', 'add_purchase', 'change_purchase', 'delete_purchase',
         'view_purchasedetail', 'add_purchasedetail', 'change_purchasedetail',
+        'view_cuotacompra', 'add_cuotacompra', 'change_cuotacompra',
+        'view_pagocuotacompra', 'add_pagocuotacompra',
     ],
 
     # El Cliente NO recibe permisos de modelo a propósito: los permisos de

@@ -1,0 +1,74 @@
+{% extends 'billing/base.html' %}
+{% block title %}Cuotas de venta{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-calendar-check"></i></span>Cuotas de venta</h2>
+    <span class="count-chip"><i class="bi bi-hash"></i>{{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize:"s" }}</span>
+  </div>
+  <div class="page-head-actions">
+    <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#colsModal">
+      <i class="bi bi-sliders"></i>Columnas
+      <span class="badge bg-secondary ms-1">{{ visible_count }}/{{ total_columns }}</span>
+    </button>
+    {% include 'billing/_export_buttons.html' %}
+  </div>
+</div>
+
+<form method="get" class="filter-card">
+  <div class="filter-card-head"><i class="bi bi-funnel"></i>Filtros</div>
+  <div class="row g-3">
+    <div class="col-md-3">
+      <label class="form-label">Estado</label>
+      {{ filter_form.estado }}
+    </div>
+    <div class="col-md-3 d-flex align-items-end gap-2">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i>Buscar</button>
+      <a href="{% url 'creditos_ventas:cuota_venta_list' %}" class="btn btn-outline-secondary">Limpiar</a>
+    </div>
+  </div>
+  {% include 'billing/_column_selector.html' %}
+</form>
+
+<div class="data-table table-fade">
+  <div class="table-scroll">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          {% for col in visible_columns %}<th>{{ col.label }}</th>{% endfor %}
+          <th class="text-end">Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          {% for col in visible_columns %}
+          <td>
+            {% if col.key == 'factura' %}<span class="cell-primary">{{ item.factura.numero_factura|default:item.factura_id }}</span>
+            {% elif col.key == 'cliente' %}{{ item.factura.customer }}
+            {% elif col.key == 'numero' %}#{{ item.numero }}
+            {% elif col.key == 'fecha_vencimiento' %}<span class="cell-sub">{{ item.fecha_vencimiento|date:'d/m/Y' }}</span>
+            {% elif col.key == 'valor' %}${{ item.valor }}
+            {% elif col.key == 'saldo' %}<span class="fw-semibold">${{ item.saldo }}</span>
+            {% elif col.key == 'estado' %}
+              {% if item.estado == 'PAGADA' %}<span class="status-pill status-on">Pagada</span>
+              {% else %}<span class="status-pill" style="background:#fbeecb;color:#8a5b00">Pendiente</span>{% endif %}
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td class="row-actions">
+            <a href="{% url 'creditos_ventas:plan_cuotas_venta' item.factura_id %}" class="act-btn act-view" title="Ver plan de cuotas"><i class="bi bi-eye"></i></a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ visible_columns|length|add:1 }}">
+          <div class="empty-state"><i class="bi bi-calendar-check"></i>No hay cuotas que coincidan.</div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% include 'billing/_pagination.html' %}
+{% endblock %}

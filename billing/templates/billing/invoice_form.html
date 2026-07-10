@@ -9,12 +9,23 @@
     <form method="post" id="invoice-form">
       {% csrf_token %}
 
-      <!-- Cabecera: cliente -->
+      <!-- Cabecera: cliente + tipo de pago -->
       <div class="row mb-4">
         <div class="col-md-6">
           <label class="form-label fw-semibold">Cliente</label>
           {{ form.customer }}
           {% for error in form.customer.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">Tipo de pago</label>
+          {{ form.tipo_pago }}
+          {% for error in form.tipo_pago.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3" id="numCuotasWrap">
+          <label class="form-label fw-semibold">{{ form.num_cuotas.label }}</label>
+          {{ form.num_cuotas }}
+          <div class="form-text" id="cuotasPreview"></div>
+          {% for error in form.num_cuotas.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
         </div>
       </div>
 
@@ -254,6 +265,34 @@
   document.getElementById('addRowBtn').addEventListener('click', addRow);
   tbody.querySelectorAll('tr.detail-row').forEach(bindRow);
   tbody.querySelectorAll('tr.detail-row').forEach(updateRow);
+
+  // --- Tipo de pago: num_cuotas solo aplica a CREDITO, con vista previa ---
+  const tipoPagoSelect = document.getElementById('id_tipo_pago');
+  const numCuotasWrap = document.getElementById('numCuotasWrap');
+  const numCuotasInput = document.getElementById('id_num_cuotas');
+  const cuotasPreview = document.getElementById('cuotasPreview');
+
+  function updateCuotasPreview() {
+    const total = parseFloat(document.getElementById('preview-total').textContent.replace('$', '')) || 0;
+    const n = parseInt(numCuotasInput.value) || 0;
+    if (n < 1 || total <= 0) { cuotasPreview.textContent = ''; return; }
+    const base = Math.floor((total / n) * 100) / 100;
+    const ultima = total - base * (n - 1);
+    cuotasPreview.textContent = n === 1
+      ? `1 cuota de $${total.toFixed(2)}`
+      : `${n - 1} cuotas de $${base.toFixed(2)} + 1 cuota final de $${ultima.toFixed(2)}`;
+  }
+
+  function syncTipoPago() {
+    const esCredito = tipoPagoSelect.value === 'CREDITO';
+    numCuotasWrap.style.display = esCredito ? '' : 'none';
+    if (!esCredito) { numCuotasInput.value = ''; cuotasPreview.textContent = ''; }
+    else updateCuotasPreview();
+  }
+  tipoPagoSelect.addEventListener('change', syncTipoPago);
+  numCuotasInput.addEventListener('input', updateCuotasPreview);
+  table.addEventListener('input', updateCuotasPreview);
+  syncTipoPago();
 })();
 </script>
 {% endblock %}

@@ -25,9 +25,23 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 HEADER_FILL = '343A40'
+ACCENT = '33459B'
+_ESTADO_COLOR = {'PAGADA': '1F9D57', 'PENDIENTE': 'E0A008'}
+
+
+def _fecha_corta(d):
+    return d.strftime('%d/%m/%Y') if d else '—'
+
+
+def _section(title, style):
+    return [
+        Paragraph(title.upper(), style),
+        HRFlowable(width='100%', thickness=0.8, color=colors.HexColor(f'#{ACCENT}'),
+                  spaceBefore=2, spaceAfter=6),
+    ]
 
 
 def _export_filename(purchase):
@@ -97,12 +111,15 @@ def export_purchase_pdf(purchase):
         title=f'Compra #{purchase.id}',
     )
     styles = getSampleStyleSheet()
-    label_style = ParagraphStyle('lbl', parent=styles['Normal'], fontName='Helvetica-Bold')
+    normal = styles['Normal']
+    label_style = ParagraphStyle('lbl', parent=normal, fontName='Helvetica-Bold')
+    section_style = ParagraphStyle('section', parent=normal, fontName='Helvetica-Bold', fontSize=10,
+                                   textColor=colors.HexColor(f'#{ACCENT}'))
 
     elements = [
         Paragraph(f'Compra #{purchase.id}', styles['Title']),
         Paragraph(
-            f"Generado: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}", styles['Normal']),
+            f"Generado: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}", normal),
         Spacer(1, 0.5 * cm),
         Table([
             [Paragraph('Proveedor:', label_style), str(purchase.supplier)],
@@ -113,6 +130,25 @@ def export_purchase_pdf(purchase):
         Spacer(1, 0.6 * cm),
     ]
 
+    # --- Condiciones de pago: contado o crédito (y a cuántos meses) ---
+    cuotas = list(purchase.cuotas.all()) if purchase.tipo_pago == 'CREDITO' else []
+    elements += _section('Condiciones de pago', section_style)
+    if purchase.tipo_pago == 'CREDITO':
+        pagadas = sum(1 for c in cuotas if c.estado == 'PAGADA')
+        condiciones = [
+            [Paragraph('Tipo de pago:', label_style), f'Crédito a {len(cuotas)} meses'],
+            [Paragraph('Cuotas pagadas:', label_style), f'{pagadas} de {len(cuotas)}'],
+            [Paragraph('Saldo pendiente:', label_style), f'${purchase.saldo}'],
+        ]
+    else:
+        condiciones = [[Paragraph('Tipo de pago:', label_style), purchase.get_tipo_pago_display()]]
+    elements += [
+        Table(condiciones, colWidths=[3.5 * cm, 12.5 * cm],
+              style=TableStyle([('FONTSIZE', (0, 0), (-1, -1), 9)])),
+        Spacer(1, 0.5 * cm),
+    ]
+
+    elements += _section('Detalle', section_style)
     data = [['Producto', 'Cantidad', 'Costo Unitario', 'Subtotal']]
     for detail in purchase.details.all():
         data.append([
@@ -144,6 +180,31 @@ def export_purchase_pdf(purchase):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
     ]))
     elements.append(table)
+
+    # --- Plan de cuotas (solo si la compra fue a crédito) ---
+    if purchase.tipo_pago == 'CREDITO' and cuotas:
+        elements.append(Spacer(1, 0.5 * cm))
+        elements += _section(f'Plan de cuotas ({len(cuotas)} meses)', section_style)
+        cuotas_data = [['#', 'Vencimiento', 'Valor', 'Saldo', 'Estado']]
+        for c in cuotas:
+            cuotas_data.append([str(c.numero), _fecha_corta(c.fecha_vencimiento),
+                               f'${c.valor}', f'${c.saldo}', c.get_estado_display()])
+        cuotas_style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(f'#{HEADER_FILL}')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F2F2F2')]),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]
+        for i, c in enumerate(cuotas, start=1):
+            color = _ESTADO_COLOR.get(c.estado, '5c6474')
+            cuotas_style.append(('TEXTCOLOR', (4, i), (4, i), colors.HexColor(f'#{color}')))
+            cuotas_style.append(('FONTNAME', (4, i), (4, i), 'Helvetica-Bold'))
+        cuotas_table = Table(cuotas_data, colWidths=[1.5 * cm, 3.5 * cm, 3 * cm, 3 * cm, 4 * cm], repeatRows=1)
+        cuotas_table.setStyle(TableStyle(cuotas_style))
+        elements.append(cuotas_table)
 
     doc.build(elements)
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')

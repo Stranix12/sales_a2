@@ -108,7 +108,8 @@ PERMISSION_EXCLUDED_APPS = {'admin', 'contenttypes', 'sessions'}
 PERMISSION_ACTIONS = ['view', 'add', 'change', 'delete']
 ROLE_COLORS = ['#33459b', '#1e9e6d', '#b9790f', '#2f6fed', '#a23e9c', '#0f9aa0']
 # Módulos de negocio primero (los que más se editan); auth (usuarios/roles) al final.
-PERMISSION_APP_ORDER = {'billing': 0, 'purchasing': 1, 'auth': 2}
+PERMISSION_APP_ORDER = {'billing': 0, 'purchasing': 1, 'creditos_ventas': 2,
+                        'facturacion_electronica': 3, 'auth': 4}
 
 
 def _roles_with_colors():

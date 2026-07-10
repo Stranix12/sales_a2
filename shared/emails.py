@@ -76,6 +76,15 @@ def send_invoice_email(invoice):
             msg.attach(f'Factura_{numero}.pdf'.replace('-', ''), pdf, 'application/pdf')
         except Exception:
             logger.exception('No se pudo adjuntar el PDF de la factura #%s (se envía sin adjunto).', invoice.id)
+        # Adjuntar también el XML autorizado del comprobante electrónico, si ya
+        # está autorizado (el SRI real entrega XML + RIDE al comprador).
+        try:
+            comprobante = getattr(invoice, 'comprobante', None)
+            if comprobante and comprobante.xml_autorizado:
+                msg.attach(f'Factura_{numero}.xml'.replace('-', ''),
+                           comprobante.xml_autorizado.encode('utf-8'), 'application/xml')
+        except Exception:
+            logger.exception('No se pudo adjuntar el XML de la factura #%s.', invoice.id)
         msg.send()
         return True
     except Exception:

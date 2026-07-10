@@ -85,6 +85,7 @@
       <div class="col-md-5">
         <div class="p-3 rounded-3 border h-100">
           <div class="text-muted small text-uppercase fw-semibold mb-2"><i class="bi bi-cash-coin me-1"></i>Pago</div>
+          <p class="mb-1"><strong>Tipo:</strong> {{ invoice.get_tipo_pago_display }}</p>
           <p class="mb-1"><strong>Estado:</strong> {{ invoice.get_payment_status_display }}</p>
           <p class="mb-1"><strong>Método:</strong> {{ invoice.get_payment_method_display|default:'—' }}</p>
           <p class="mb-0"><strong>Fecha de pago:</strong> {{ invoice.payment_date|date:"d/m/Y H:i"|default:'—' }}</p>
@@ -105,10 +106,93 @@
       </div>
     </div>
 
+    <!-- Comprobante electrónico (SRI simulado) -->
+    <div class="row g-3 mt-1">
+      <div class="col-12">
+        <div class="p-3 rounded-3 border">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <div class="text-muted small text-uppercase fw-semibold"><i class="bi bi-upc-scan me-1"></i>Comprobante electrónico (SRI)</div>
+            {% if comprobante %}
+              {% if comprobante.estado == 'AUTORIZADO' %}<span class="status-pill status-on">Autorizado</span>
+              {% elif comprobante.estado == 'DEVUELTO' %}<span class="status-pill" style="background:#fbe4e6;color:#b02a37">Devuelto</span>
+              {% else %}<span class="status-pill" style="background:#fbeecb;color:#8a5b00">{{ comprobante.get_estado_display }}</span>{% endif %}
+            {% else %}
+              <span class="status-pill status-off">No generado</span>
+            {% endif %}
+          </div>
+
+          <!-- Progreso del ciclo del SRI -->
+          <div class="d-flex flex-wrap align-items-center gap-1 mb-3 small">
+            {% with est=comprobante.estado %}
+            <span class="badge {% if est == 'GENERADO' or est == 'FIRMADO' or est == 'RECIBIDO' or est == 'AUTORIZADO' %}bg-primary{% else %}bg-secondary{% endif %}">1. Generado</span>
+            <i class="bi bi-arrow-right text-muted"></i>
+            <span class="badge {% if est == 'FIRMADO' or est == 'RECIBIDO' or est == 'AUTORIZADO' %}bg-primary{% else %}bg-secondary{% endif %}">2. Firmado</span>
+            <i class="bi bi-arrow-right text-muted"></i>
+            <span class="badge {% if est == 'RECIBIDO' or est == 'AUTORIZADO' %}bg-primary{% else %}bg-secondary{% endif %}">3. Recibido</span>
+            <i class="bi bi-arrow-right text-muted"></i>
+            <span class="badge {% if est == 'AUTORIZADO' %}bg-success{% else %}bg-secondary{% endif %}">4. Autorizado</span>
+            {% endwith %}
+          </div>
+
+          {% if comprobante %}
+          <div class="row g-2 small mb-2">
+            <div class="col-md-6"><strong>Ambiente:</strong> {{ comprobante.ambiente_display }}</div>
+            <div class="col-md-6"><strong>Clave de acceso:</strong> <code style="word-break:break-all">{{ comprobante.clave_acceso }}</code></div>
+            {% if comprobante.numero_autorizacion %}
+            <div class="col-md-6"><strong>N.º autorización:</strong> <code style="word-break:break-all">{{ comprobante.numero_autorizacion }}</code></div>
+            <div class="col-md-6"><strong>Fecha autorización:</strong> {{ comprobante.fecha_autorizacion|date:"d/m/Y H:i" }}</div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          <div class="d-flex flex-wrap gap-2">
+            {% if not comprobante or comprobante.siguiente_estado %}
+            <form method="post" action="{% url 'facturacion_electronica:enviar_al_sri' invoice.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-send me-1"></i>Enviar al SRI
+                {% if comprobante and comprobante.siguiente_estado %}(→ {{ comprobante.siguiente_estado|title }}){% else %}(iniciar){% endif %}
+              </button>
+            </form>
+            {% endif %}
+            <a href="{% url 'facturacion_electronica:descargar_xml' invoice.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-xml me-1"></i>Descargar XML</a>
+            <a href="{% url 'facturacion_electronica:descargar_ride' invoice.pk %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar RIDE</a>
+          </div>
+
+          {% if comprobante.mensajes %}
+          <details class="mt-3">
+            <summary class="small text-muted" style="cursor:pointer">Ver bitácora del proceso SRI</summary>
+            <pre class="small mt-2 mb-0" style="white-space:pre-wrap;background:var(--surface-2);padding:.6rem;border-radius:8px">{{ comprobante.mensajes }}</pre>
+          </details>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Plan de crédito: solo si la factura se registró a crédito -->
+    {% if invoice.tipo_pago == 'CREDITO' %}
+    <div class="row g-3 mt-1">
+      <div class="col-12">
+        <div class="p-3 rounded-3 border h-100 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div>
+            <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-calendar-check me-1"></i>Plan de crédito</div>
+            <p class="mb-0">Saldo pendiente: <strong>${{ invoice.saldo }}</strong>
+              · <span class="status-pill {% if invoice.estado == 'PAGADA' %}status-on{% else %}{% endif %}"
+                      style="{% if invoice.estado == 'PENDIENTE' %}background:#fbeecb;color:#8a5b00{% endif %}">{{ invoice.get_estado_display|upper }}</span></p>
+          </div>
+          <a href="{% url 'creditos_ventas:plan_cuotas_venta' invoice.pk %}" class="btn btn-outline-primary">
+            <i class="bi bi-list-check me-1"></i>Ver plan de cuotas
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
   <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
     <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver</a>
     <a href="{% url 'billing:invoice_pdf' invoice.pk %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF</a>
+    {% if invoice.tipo_pago != 'CREDITO' %}
     {% if st != 'PAGADA' %}
     <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#payModal"><i class="bi bi-cash-coin me-1"></i>Marcar como pagado</button>
     {% if paypal_configured %}
@@ -125,12 +209,13 @@
             title="PayPal no está configurado en este servidor"><i class="bi bi-paypal me-1"></i>Cobrar con PayPal</button>
     {% endif %}
     {% endif %}
+    {% endif %}
     <a href="{% url 'billing:invoice_delete' invoice.pk %}" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Eliminar</a>
   </div>
 </div>
 
 <!-- Modal: marcar como pagado -->
-{% if st != 'PAGADA' %}
+{% if invoice.tipo_pago != 'CREDITO' and st != 'PAGADA' %}
 <div class="modal fade" id="payModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">

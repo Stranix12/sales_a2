@@ -1,0 +1,97 @@
+{% extends 'billing/base.html' %}
+{% block title %}Registrar pago — {{ titulo }}{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">
+      <a href="{% url plan_url documento.pk %}" class="text-decoration-none">
+        <i class="bi bi-arrow-left me-1"></i>{{ titulo }}
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Registrar pago</li>
+  </ol>
+</nav>
+
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-header bg-success text-white py-3 px-4">
+    <h4 class="mb-0"><i class="bi bi-cash-coin me-2"></i>Registrar pago — {{ titulo }}</h4>
+  </div>
+  <div class="card-body p-4">
+    <p class="text-muted small">{{ contraparte_label }}: <strong>{{ contraparte }}</strong> · Saldo del documento: <strong>${{ documento.saldo }}</strong></p>
+
+    <form method="post">
+      {% csrf_token %}
+      {{ formset.management_form }}
+      {% for error in formset.non_form_errors %}<div class="alert alert-danger">{{ error }}</div>{% endfor %}
+
+      <div class="row g-3 mb-4">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">{{ pago_form.fecha.label }}</label>
+          {{ pago_form.fecha }}
+          {% for error in pago_form.fecha.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="col-md-8">
+          <label class="form-label fw-semibold">{{ pago_form.observacion.label }}</label>
+          {{ pago_form.observacion }}
+        </div>
+      </div>
+
+      {% if filas %}
+      <div class="table-responsive mb-3">
+        <table class="table table-bordered align-middle">
+          <thead class="table-secondary">
+            <tr>
+              <th class="text-center" style="width:70px;">Pagar</th>
+              <th class="text-center">Cuota</th>
+              <th>Vencimiento</th>
+              <th class="text-end">Saldo</th>
+              <th style="width:180px;">Monto a pagar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for cuota, row in filas %}
+            <tr>
+              <td class="text-center">
+                {{ row.pagar }}
+                {{ row.cuota_id }}
+              </td>
+              <td class="text-center">#{{ cuota.numero }}</td>
+              <td>{{ cuota.fecha_vencimiento|date:'d/m/Y' }}</td>
+              <td class="text-end fw-semibold">${{ cuota.saldo }}</td>
+              <td>
+                {{ row.monto }}
+                {% for error in row.monto.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Marca las cuotas que vas a pagar e ingresa el monto de cada una (no puede superar su saldo).</p>
+        <div class="d-flex gap-2">
+          <a href="{% url plan_url documento.pk %}" class="btn btn-outline-secondary">Cancelar</a>
+          <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Registrar pago</button>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty-state"><i class="bi bi-check2-circle"></i>No hay cuotas pendientes por pagar.</div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Marcar el checkbox "Pagar" automáticamente si el usuario ya escribió un monto.
+  document.querySelectorAll('input[name$="-monto"]').forEach(function (montoInput) {
+    montoInput.addEventListener('input', function () {
+      var row = this.closest('tr');
+      var checkbox = row ? row.querySelector('input[name$="-pagar"]') : null;
+      if (checkbox && this.value) checkbox.checked = true;
+    });
+  });
+})();
+</script>
+{% endblock %}

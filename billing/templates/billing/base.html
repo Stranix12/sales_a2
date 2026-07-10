@@ -65,6 +65,7 @@
             <a class="sidebar-sublink" href="{% url 'billing:supplier_list' %}"><i class="bi bi-truck"></i>Proveedores</a>
             <a class="sidebar-sublink" href="{% url 'billing:product_list' %}"><i class="bi bi-box-seam"></i>Productos</a>
             <a class="sidebar-sublink" href="{% url 'purchasing:purchase_list' %}"><i class="bi bi-bag-plus"></i>Compras</a>
+            <a class="sidebar-sublink" href="{% url 'creditos_ventas:cuota_compra_list' %}"><i class="bi bi-calendar-check"></i>Cuotas pendientes</a>
           </div>
         </div>
         {% endif %}
@@ -78,6 +79,7 @@
           <div class="sidebar-submenu">
             <a class="sidebar-sublink" href="{% url 'billing:customer_list' %}"><i class="bi bi-people"></i>Clientes</a>
             <a class="sidebar-sublink" href="{% url 'billing:invoice_list' %}"><i class="bi bi-receipt-cutoff"></i>Facturas</a>
+            <a class="sidebar-sublink" href="{% url 'creditos_ventas:cuota_venta_list' %}"><i class="bi bi-calendar-check"></i>Cuotas pendientes</a>
           </div>
         </div>
         {% endif %}

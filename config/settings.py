@@ -77,6 +77,8 @@ INSTALLED_APPS = [
     'billing',
     'purchasing',
     'security',
+    'creditos_ventas',
+    'facturacion_electronica',
 
 ]
 
@@ -231,6 +233,9 @@ EMPRESA = {
     'ambiente': os.environ.get('EMPRESA_AMBIENTE', '1'),   # 1=pruebas, 2=producción
     'establecimiento': '001',
     'punto_emision': '001',
+    # Datos que el XML del SRI exige en infoTributaria/infoFactura:
+    'nombre_comercial': os.environ.get('EMPRESA_NOMBRE_COMERCIAL', 'Sales System'),
+    'obligado_contabilidad': os.environ.get('EMPRESA_OBLIGADO_CONTABILIDAD', 'NO'),  # SI/NO
 }
 
 # PayPal (Sandbox por defecto): pago simulado, sin dinero real. Para producción

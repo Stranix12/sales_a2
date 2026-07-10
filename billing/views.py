@@ -20,6 +20,8 @@ from .mixins import ExportListMixin
 from .electronic import asignar_datos_electronicos
 from .invoice_export import invoice_pdf_response
 from . import paypal
+from creditos_ventas.services import generar_cuotas_venta
+from facturacion_electronica.services import generar_comprobante
 from shared.decorators import audit_action
 from shared.emails import send_invoice_email
 
@@ -531,8 +533,26 @@ def invoice_create(request):
                     invoice.tax = subtotal * Decimal('0.15')
                     invoice.total = invoice.subtotal + invoice.tax
                     invoice.save()
+
+                    # Crédito de ventas: CONTADO queda cancelada al instante
+                    # (sin cuotas); CREDITO genera el plan de cuotas mensuales.
+                    if form.cleaned_data['tipo_pago'] == 'CREDITO':
+                        generar_cuotas_venta(invoice, form.cleaned_data['num_cuotas'])
+                    else:
+                        invoice.tipo_pago = 'CONTADO'
+                        invoice.saldo = Decimal('0')
+                        invoice.estado = 'PAGADA'
+                        invoice.payment_status = 'PAGADA'
+                        invoice.payment_method = 'efectivo'
+                        invoice.payment_date = timezone.now()
+                        invoice.save(update_fields=['tipo_pago', 'saldo', 'estado',
+                                                    'payment_status', 'payment_method', 'payment_date'])
+
                     # Facturación electrónica: asignar número + clave de acceso
                     asignar_datos_electronicos(invoice)
+                    # Crear el comprobante electrónico (estado GENERADO); el
+                    # usuario lo avanza por el ciclo del SRI desde el detalle.
+                    generar_comprobante(invoice)
 
             if invoice is not None:
                 send_invoice_email(invoice)  # fuera de la transacción: no retiene el lock durante el envío
@@ -564,6 +584,7 @@ def invoice_detail(request, pk):
     return render(request, 'billing/invoice_detail.html', {
         'invoice': invoice,
         'paypal_configured': paypal.is_configured(),
+        'comprobante': getattr(invoice, 'comprobante', None),
     })
 
 @login_required

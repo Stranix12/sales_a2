@@ -4,6 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from billing.models import Product
+from creditos_ventas.services import generar_cuotas_compra
 from .models import Purchase, PurchaseDetail
 from .forms import PurchaseForm, PurchaseDetailFormSet, PurchaseFilterForm
 from .exports import export_purchase_excel, export_purchase_pdf
@@ -53,6 +54,16 @@ def purchase_create(request):
             purchase.tax = subtotal * Decimal('0.15')
             purchase.total = purchase.subtotal + purchase.tax
             purchase.save()
+
+            # Crédito de compras: CONTADO queda cancelada al instante (sin
+            # cuotas); CREDITO genera el plan de cuotas mensuales.
+            if form.cleaned_data['tipo_pago'] == 'CREDITO':
+                generar_cuotas_compra(purchase, form.cleaned_data['num_cuotas'])
+            else:
+                purchase.tipo_pago = 'CONTADO'
+                purchase.saldo = Decimal('0')
+                purchase.estado = 'PAGADA'
+                purchase.save(update_fields=['tipo_pago', 'saldo', 'estado'])
 
             # Reto 1: la compra reabastece inventario (la venta resta, la compra suma)
             for detail in saved_details:

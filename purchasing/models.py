@@ -1,11 +1,16 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from decimal import Decimal
-from billing.models import Supplier, Product   # Reutilizamos modelos de billing
+from billing.models import Supplier, Product, Invoice   # Reutilizamos modelos de billing
  
  
 class Purchase(models.Model):
     """Cabecera de compra. Documenta una adquisición a un proveedor."""
+    # --- Compras a crédito (app creditos_ventas) — mismos choices que
+    # billing.Invoice, importados para no duplicar la tupla.
+    TIPO_PAGO = Invoice.TIPO_PAGO
+    ESTADO_CREDITO = Invoice.ESTADO_CREDITO
+
     supplier = models.ForeignKey(
         Supplier, on_delete=models.PROTECT, related_name='purchases'
     )
@@ -17,6 +22,9 @@ class Purchase(models.Model):
     tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
+    tipo_pago = models.CharField(max_length=10, choices=TIPO_PAGO, default='CONTADO')
+    saldo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    estado = models.CharField(max_length=15, choices=ESTADO_CREDITO, default='PENDIENTE')
  
     class Meta:
         verbose_name = 'Purchase'

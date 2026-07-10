@@ -1,5 +1,6 @@
 from django import forms
 from django.forms import inlineformset_factory
+from creditos_ventas.forms import tipo_pago_field, num_cuotas_field, validar_tipo_pago
 from .models import Brand, ProductGroup, Supplier, Product, Customer, Invoice, InvoiceDetail
 
 class BrandForm(forms.ModelForm):
@@ -219,13 +220,25 @@ class CustomerForm(forms.ModelForm):
 
 
 class InvoiceForm(forms.ModelForm):
-    """Formulario para la cabecera de la factura."""
+    """Formulario para la cabecera de la factura.
+
+    tipo_pago/num_cuotas no son campos de Invoice.Meta.fields (el modelo
+    guarda tipo_pago, pero num_cuotas es solo un dato de entrada para
+    generar las cuotas) — la vista los lee de cleaned_data y llama a
+    creditos_ventas.services tras guardar la factura."""
+    tipo_pago = tipo_pago_field()
+    num_cuotas = num_cuotas_field()
+
     class Meta:
         model = Invoice
         fields = ['customer']
         widgets = {
             'customer': forms.Select(attrs={'class': 'form-select'}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        return validar_tipo_pago(self, cleaned_data)
 
 
 # Formset: permite agregar MÚLTIPLES detalles dentro de UNA factura.
