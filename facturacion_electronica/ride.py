@@ -151,6 +151,9 @@ def build_ride_pdf_bytes(invoice):
     ]
 
     # ---------------- Condiciones de pago ----------------
+    # tipo_pago (Contado/Crédito = si es a plazos) es distinto de payment_status
+    # (Pendiente/Pagada) y payment_method (PayPal/efectivo/…): se muestran los
+    # tres para que quede claro el estado real del pago.
     cuotas = list(invoice.cuotas.all()) if invoice.tipo_pago == 'CREDITO' else []
     elements += section('Condiciones de pago')
     if invoice.tipo_pago == 'CREDITO':
@@ -162,6 +165,12 @@ def build_ride_pdf_bytes(invoice):
         ]
     else:
         cond = [[Paragraph('Tipo de pago:', lbl), invoice.get_tipo_pago_display()]]
+    cond += [
+        [Paragraph('Estado de pago:', lbl), invoice.get_payment_status_display()],
+        [Paragraph('Método de pago:', lbl),
+         invoice.get_payment_method_display() if invoice.payment_method else '—'],
+        [Paragraph('Fecha de pago:', lbl), _fecha(invoice.payment_date)],
+    ]
     elements += [
         Table(cond, colWidths=[3.5 * cm, usable - 3.5 * cm],
               style=TableStyle([('FONTSIZE', (0, 0), (-1, -1), 9), ('BOTTOMPADDING', (0, 0), (-1, -1), 3)])),
