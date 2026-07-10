@@ -15,9 +15,19 @@ from billing.electronic import asignar_datos_electronicos, _digito_verificador_m
 from billing.tests import _make_catalog
 
 from .models import ComprobanteElectronico
-from .ride import build_ride_pdf_bytes
+from .ride import build_ride_pdf_bytes, _money
 from .services import generar_comprobante, avanzar_estado, procesar_todo
 from .xml_builder import generar_xml_factura
+
+
+class MoneyFormatTests(TestCase):
+    def test_money_siempre_dos_decimales(self):
+        # Un IVA recién calculado (subtotal*0.15) puede traer 4 decimales.
+        self.assertEqual(_money(Decimal('3.0000')), '$3.00')
+        self.assertEqual(_money(Decimal('23.0000')), '$23.00')
+        self.assertEqual(_money(Decimal('20')), '$20.00')
+        self.assertEqual(_money(Decimal('19.166')), '$19.17')
+        self.assertEqual(_money(None), '$0.00')
 
 
 def _factura(customer, total='57.50', subtotal='50.00', tax='7.50'):

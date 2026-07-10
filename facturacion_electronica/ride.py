@@ -6,6 +6,7 @@ autorización con el código de barras de la clave de acceso, cliente,
 condiciones de pago (contado/crédito), detalle, totales y, si aplica, el
 plan de cuotas. Reemplaza al PDF plano anterior; ``billing.invoice_export``
 delega aquí."""
+from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 
 from django.conf import settings
@@ -26,6 +27,13 @@ _ESTADO_COLOR = {
     'AUTORIZADO': '1F9D57', 'RECIBIDO': '2A7DE1', 'FIRMADO': 'B9790F',
     'GENERADO': '6B7280', 'DEVUELTO': 'D64550',
 }
+
+
+def _money(valor):
+    """Formatea un importe como '$0.00' (siempre 2 decimales), sin depender
+    de la precisión con que venga el Decimal (un valor recién calculado en
+    memoria puede traer más decimales que la columna de la BD)."""
+    return f'${Decimal(valor or 0).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)}'
 
 
 def _fecha(dt):
@@ -161,7 +169,7 @@ def build_ride_pdf_bytes(invoice):
         cond = [
             [Paragraph('Tipo de pago:', lbl), f'Crédito a {len(cuotas)} meses'],
             [Paragraph('Cuotas pagadas:', lbl), f'{pagadas} de {len(cuotas)}'],
-            [Paragraph('Saldo pendiente:', lbl), f'${invoice.saldo}'],
+            [Paragraph('Saldo pendiente:', lbl), _money(invoice.saldo)],
         ]
     else:
         cond = [[Paragraph('Tipo de pago:', lbl), invoice.get_tipo_pago_display()]]
@@ -181,7 +189,7 @@ def build_ride_pdf_bytes(invoice):
     elements += section('Detalle')
     data = [['Producto', 'Cant.', 'P. unit.', 'Subtotal']]
     for d in invoice.details.select_related('product'):
-        data.append([d.product.name, str(d.quantity), f'${d.unit_price}', f'${d.subtotal}'])
+        data.append([d.product.name, str(d.quantity), _money(d.unit_price), _money(d.subtotal)])
     n_lines = invoice.details.count()
     det = Table(data, colWidths=[usable - 8.5 * cm, 2.5 * cm, 3 * cm, 3 * cm], repeatRows=1)
     det.setStyle(TableStyle([
@@ -200,9 +208,9 @@ def build_ride_pdf_bytes(invoice):
 
     # ---------------- Totales (caja resaltada a la derecha) ----------------
     tot = Table([
-        ['Subtotal', f'${invoice.subtotal}'],
-        ['IVA (15%)', f'${invoice.tax}'],
-        ['TOTAL', f'${invoice.total}'],
+        ['Subtotal', _money(invoice.subtotal)],
+        ['IVA (15%)', _money(invoice.tax)],
+        ['TOTAL', _money(invoice.total)],
     ], colWidths=[3.5 * cm, 3 * cm], hAlign='RIGHT')
     tot.setStyle(TableStyle([
         ('FONTSIZE', (0, 0), (-1, -1), 9),
@@ -223,7 +231,7 @@ def build_ride_pdf_bytes(invoice):
         cdata = [['#', 'Vencimiento', 'Valor', 'Saldo', 'Estado']]
         for c in cuotas:
             cdata.append([str(c.numero), _fecha_corta(c.fecha_vencimiento),
-                          f'${c.valor}', f'${c.saldo}', c.get_estado_display()])
+                          _money(c.valor), _money(c.saldo), c.get_estado_display()])
         cstyle = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(f'#{HEADER_FILL}')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),

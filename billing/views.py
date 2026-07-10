@@ -1,6 +1,6 @@
 import json
 import math
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -530,7 +530,7 @@ def invoice_create(request):
                         locked[pid].save(update_fields=['stock'])
                     subtotal = sum((d.subtotal for d in invoice.details.all()), Decimal('0'))
                     invoice.subtotal = subtotal
-                    invoice.tax = subtotal * Decimal('0.15')
+                    invoice.tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                     invoice.total = invoice.subtotal + invoice.tax
                     invoice.save()
 

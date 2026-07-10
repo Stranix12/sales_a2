@@ -7,7 +7,7 @@ por modelo), aquí el control de acceso es **por fila**: cada vista opera
 (request.user.customer_account). Por eso el rol Cliente no recibe ningún
 permiso de modelo en setup_roles.
 """
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from functools import wraps
 
 from django import forms
@@ -281,7 +281,7 @@ def portal_cart_add(request, pk):
 @customer_required
 def portal_cart(request):
     lines, subtotal = _cart_lines(request)
-    tax = subtotal * Decimal('0.15')
+    tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     return render(request, 'billing/portal/cart.html', {
         'lines': lines,
         'subtotal': subtotal,
@@ -370,7 +370,7 @@ def portal_checkout(request):
                 product.stock -= qty
                 product.save(update_fields=['stock'])
             invoice.subtotal = subtotal
-            invoice.tax = subtotal * Decimal('0.15')
+            invoice.tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             invoice.total = invoice.subtotal + invoice.tax
             invoice.save()
             asignar_datos_electronicos(invoice)

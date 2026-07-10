@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import F, Avg, Sum
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
@@ -51,7 +51,7 @@ def purchase_create(request):
             saved_details = formset.save()
             subtotal = sum(d.subtotal for d in purchase.details.all())
             purchase.subtotal = subtotal
-            purchase.tax = subtotal * Decimal('0.15')
+            purchase.tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             purchase.total = purchase.subtotal + purchase.tax
             purchase.save()
 
