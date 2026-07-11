@@ -677,3 +677,47 @@ class InvoiceEmailTests(TestCase):
         self._crear_factura(sin_email)
         self.assertEqual(Invoice.objects.count(), before + 1)  # la factura sí se creó
         self.assertEqual(len(mail.outbox), 0)                  # sin correo, sin excepción
+
+
+class AsyncInvoiceEmailTests(TestCase):
+    """El correo de factura (con PDF adjunto) se despacha en segundo plano
+    para no bloquear la request; con locmem/consola cae a envío síncrono."""
+    def test_con_locmem_envia_sincrono(self):
+        # En los tests el backend es locmem: el wrapper debe enviar en el acto
+        # (así el resto de tests puede verificar mail.outbox sin esperar hilos).
+        from django.core import mail
+        from shared.emails import send_invoice_email_async
+        _, _, _, _, customer = _make_catalog()
+        invoice = Invoice.objects.create(customer=customer, subtotal=Decimal('10'),
+                                         tax=Decimal('1.5'), total=Decimal('11.5'))
+        ret = send_invoice_email_async(invoice)
+        self.assertTrue(ret)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_con_backend_real_despacha_en_hilo_y_retorna_ya(self):
+        import threading
+        import time
+        from unittest.mock import patch
+        from django.test import override_settings
+        import shared.emails as emails
+
+        done = threading.Event()
+        hilos = {}
+
+        def fake_send(invoice):
+            time.sleep(0.3)  # simula PDF + subida a Brevo
+            hilos['worker'] = threading.current_thread().name
+            done.set()
+            return True
+
+        _, _, _, _, customer = _make_catalog()
+        invoice = Invoice.objects.create(customer=customer, total=Decimal('5'))
+        with override_settings(EMAIL_BACKEND='anymail.backends.brevo.EmailBackend'):
+            with patch.object(emails, 'send_invoice_email', side_effect=fake_send):
+                t0 = time.perf_counter()
+                ret = emails.send_invoice_email_async(invoice)
+                elapsed = time.perf_counter() - t0
+        self.assertTrue(ret)
+        self.assertLess(elapsed, 0.2)                 # retornó sin esperar el envío
+        self.assertTrue(done.wait(timeout=3))         # el envío sí ocurrió, en background
+        self.assertNotEqual(hilos['worker'], threading.main_thread().name)

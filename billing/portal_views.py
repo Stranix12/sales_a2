@@ -22,7 +22,7 @@ from .electronic import asignar_datos_electronicos
 from .invoice_export import invoice_pdf_response
 from .models import Customer, Invoice, InvoiceDetail, Product
 from .views import _apply_payment
-from shared.emails import send_invoice_email
+from shared.emails import send_invoice_email_async
 
 
 def customer_required(view_func):
@@ -378,7 +378,7 @@ def portal_checkout(request):
     if invoice is None:
         return redirect('billing:portal_cart')
 
-    send_invoice_email(invoice)  # fuera de la transacción (no retiene el lock)
+    send_invoice_email_async(invoice)  # en segundo plano: el cliente ve su factura sin esperar el correo
     _save_cart(request, {})
     messages.success(request, f'¡Pedido realizado! Se generó tu factura {invoice.numero_factura}. '
                               'Puedes pagarla ahora mismo con PayPal.')

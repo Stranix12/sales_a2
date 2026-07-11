@@ -23,7 +23,7 @@ from . import paypal
 from creditos_ventas.services import generar_cuotas_venta
 from facturacion_electronica.services import generar_comprobante
 from shared.decorators import audit_action
-from shared.emails import send_invoice_email
+from shared.emails import send_invoice_email_async
 
 
 _MESES_ABREV = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
@@ -555,7 +555,7 @@ def invoice_create(request):
                     generar_comprobante(invoice)
 
             if invoice is not None:
-                send_invoice_email(invoice)  # fuera de la transacción: no retiene el lock durante el envío
+                send_invoice_email_async(invoice)  # en segundo plano: no bloquea la request con el envío + adjunto
                 messages.success(request, f'Factura {invoice.numero_factura} creada. Total: ${invoice.total}')
                 return redirect('billing:invoice_list')
     else:
@@ -606,7 +606,7 @@ def _apply_payment(invoice, user, method, note=''):
     PaymentLog.objects.create(
         invoice=invoice, user=user, method=method, amount=invoice.total, note=note[:200],
     )
-    send_invoice_email(invoice)  # reenvía el comprobante (ahora PAGADA) con el PDF
+    send_invoice_email_async(invoice)  # reenvía el comprobante (ahora PAGADA) con el PDF, en segundo plano
 
 
 @login_required

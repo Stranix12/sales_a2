@@ -8,9 +8,11 @@ en el logger 'emails' y se retorna False, para no romper el flujo de
 registro/facturación por un problema de correo.
 """
 import logging
+import threading
 
 from django.conf import settings
 from django.core.mail import send_mail, EmailMessage
+from django.db import close_old_connections
 from django.template.loader import render_to_string
 
 logger = logging.getLogger('emails')
@@ -90,3 +92,30 @@ def send_invoice_email(invoice):
     except Exception:
         logger.exception('No se pudo enviar la factura #%s a %s', invoice.id, customer.email)
         return False
+
+
+def send_invoice_email_async(invoice):
+    """Igual que send_invoice_email pero sin bloquear la petición.
+
+    A diferencia del correo de bienvenida (solo texto), el de factura genera
+    el PDF (RIDE) y lo sube a Brevo como adjunto; hacerlo dentro de la request
+    hace que crear la factura o comprar en el portal se sientan lentos. Con un
+    backend real (SMTP/HTTP en producción) se despacha en un hilo daemon y la
+    vista responde al instante; con locmem (tests) o consola (desarrollo) se
+    envía en el momento, para que el flujo siga siendo predecible y
+    verificable.
+    """
+    backend = settings.EMAIL_BACKEND
+    if 'locmem' in backend or 'console' in backend:
+        return send_invoice_email(invoice)
+
+    def _worker():
+        try:
+            send_invoice_email(invoice)
+        finally:
+            # El hilo abre su propia conexión a la BD (se accede a details/
+            # comprobante al armar el PDF): hay que cerrarla al terminar.
+            close_old_connections()
+
+    threading.Thread(target=_worker, daemon=True, name=f'invoice-email-{invoice.id}').start()
+    return True
