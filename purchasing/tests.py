@@ -103,3 +103,26 @@ class PurchasePermissionTests(TestCase):
         purchase = Purchase.objects.create(supplier=self.supplier, document_number='DEL-1')
         c = Client(); c.force_login(self.vendedor)
         self.assertEqual(c.get(f'/purchases/{purchase.pk}/delete/').status_code, 403)
+
+
+class PurchaseDeleteTests(TestCase):
+    """Una compra a crédito tiene CuotaCompra con on_delete=PROTECT: borrarla
+    debe mostrar un mensaje claro, no un 500 (ver creditos_ventas.models)."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_pdel', 'a@a.com', 'pass12345')
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_eliminar_compra_con_cuotas_no_revienta_y_avisa(self):
+        from creditos_ventas.services import generar_cuotas_compra
+        purchase = Purchase.objects.create(supplier=self.supplier, document_number='DEL-CR-1',
+                                           total=Decimal('60.00'))
+        generar_cuotas_compra(purchase, 3)
+        r = self.client.post(f'/purchases/{purchase.pk}/delete/', follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(Purchase.objects.filter(pk=purchase.pk).exists())  # no se borró
+        self.assertIn('plan de cuotas', r.content.decode().lower())

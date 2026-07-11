@@ -601,3 +601,33 @@ class PortalShopTests(TestCase):
         c = Client(); c.force_login(vendedor)
         r = c.get('/portal/', follow=True)
         self.assertIn('no está vinculado', r.content.decode())
+
+
+class InvoiceDeleteTests(TestCase):
+    """Una factura a crédito tiene CuotaVenta con on_delete=PROTECT: borrarla
+    debe mostrar un mensaje claro, no un 500 (ver creditos_ventas.models)."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_del', 'a@a.com', 'pass12345')
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_eliminar_factura_sin_cuotas_funciona(self):
+        invoice = Invoice.objects.create(customer=self.customer, subtotal=Decimal('10'),
+                                         tax=Decimal('1.5'), total=Decimal('11.5'))
+        r = self.client.post(f'/invoices/{invoice.pk}/delete/', follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Invoice.objects.filter(pk=invoice.pk).exists())
+
+    def test_eliminar_factura_con_cuotas_no_revienta_y_avisa(self):
+        from creditos_ventas.services import generar_cuotas_venta
+        invoice = Invoice.objects.create(customer=self.customer, subtotal=Decimal('20'),
+                                         tax=Decimal('3'), total=Decimal('23'))
+        generar_cuotas_venta(invoice, 3)
+        r = self.client.post(f'/invoices/{invoice.pk}/delete/', follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())  # no se borró
+        self.assertIn('plan de cuotas', r.content.decode().lower())

@@ -9,7 +9,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView, D
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum, F, DecimalField, ExpressionWrapper
+from django.db.models import Sum, F, DecimalField, ExpressionWrapper, ProtectedError
 from django.db.models.functions import TruncMonth
 from .models import *
 from .forms import (BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
@@ -703,7 +703,17 @@ def invoice_delete(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
     if request.method == 'POST':
         invoice_id = invoice.id
-        invoice.delete()
+        try:
+            invoice.delete()
+        except ProtectedError:
+            # La factura tiene un plan de cuotas (crédito de ventas): no se
+            # puede borrar sin antes eliminar/cancelar sus cuotas.
+            messages.error(
+                request,
+                f'No se puede eliminar la factura #{invoice_id}: tiene un plan de cuotas '
+                'asociado (venta a crédito). Elimina primero sus cuotas o pagos.'
+            )
+            return redirect('billing:invoice_detail', pk=invoice_id)
         messages.success(request, f'Invoice #{invoice_id} deleted!')
         return redirect('billing:invoice_list')
     return render(request, 'billing/invoice_confirm_delete.html', {'object': invoice})

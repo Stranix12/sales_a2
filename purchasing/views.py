@@ -1,5 +1,5 @@
 from decimal import Decimal, ROUND_HALF_UP
-from django.db.models import F, Avg, Sum
+from django.db.models import F, Avg, Sum, ProtectedError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -134,7 +134,17 @@ def purchase_delete(request, pk):
     purchase = get_object_or_404(Purchase, pk=pk)
     if request.method == 'POST':
         pid = purchase.id
-        purchase.delete()
+        try:
+            purchase.delete()
+        except ProtectedError:
+            # La compra tiene un plan de cuotas (crédito de compras): no se
+            # puede borrar sin antes eliminar/cancelar sus cuotas.
+            messages.error(
+                request,
+                f'No se puede eliminar la compra #{pid}: tiene un plan de cuotas '
+                'asociado (compra a crédito). Elimina primero sus cuotas o pagos.'
+            )
+            return redirect('purchasing:purchase_detail', pk=pid)
         messages.success(request, f'Purchase #{pid} deleted!')
         return redirect('purchasing:purchase_list')
     return render(request, 'purchasing/purchase_confirm_delete.html', {'object': purchase})
