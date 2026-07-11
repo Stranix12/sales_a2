@@ -1,6 +1,6 @@
-"""Suite de tests de creditos_ventas: generación de cuotas (venta y compra),
-registro de pagos (validaciones), sincronización de saldo/estado del
-documento y permisos.
+"""Suite de tests de creditos_ventas: generación de cuotas de venta,
+registro de pagos (validaciones), sincronización de saldo/estado de la
+factura y permisos. El crédito de compras se prueba en creditos_compras.
 
 Corre con: python manage.py test creditos_ventas
 """
@@ -15,14 +15,9 @@ from django.test import Client, TestCase
 
 from billing.models import Invoice, PaymentLog
 from billing.tests import _make_catalog
-from purchasing.models import Purchase
-from purchasing.tests import _make_catalog as _make_purchase_catalog
 
-from .models import CuotaVenta, CuotaCompra
-from .services import (
-    generar_cuotas_venta, generar_cuotas_compra,
-    registrar_pagos_venta, registrar_pagos_compra,
-)
+from .models import CuotaVenta
+from .services import generar_cuotas_venta, registrar_pagos_venta
 
 
 # =====================================================================
@@ -86,34 +81,6 @@ class GenerarCuotasVentaTests(TestCase):
         generar_cuotas_venta(invoice, 2)
         with self.assertRaises(ValidationError):
             generar_cuotas_venta(invoice, 3)
-
-
-# =====================================================================
-# Generación de cuotas — compra (mismo algoritmo, se cubre lo esencial)
-# =====================================================================
-class GenerarCuotasCompraTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        _, _, cls.supplier, _ = _make_purchase_catalog()
-
-    def test_suma_exacta_al_total_no_divisible(self):
-        purchase = Purchase.objects.create(supplier=self.supplier, document_number='CR-1', total=Decimal('100.00'))
-        cuotas = generar_cuotas_compra(purchase, 3)
-        self.assertEqual(sum(c.valor for c in cuotas), Decimal('100.00'))
-
-    def test_generar_actualiza_saldo_y_estado_de_la_compra(self):
-        purchase = Purchase.objects.create(supplier=self.supplier, document_number='CR-2', total=Decimal('60.00'))
-        generar_cuotas_compra(purchase, 3)
-        purchase.refresh_from_db()
-        self.assertEqual(purchase.saldo, Decimal('60.00'))
-        self.assertEqual(purchase.estado, 'PENDIENTE')
-        self.assertEqual(purchase.tipo_pago, 'CREDITO')
-
-    def test_no_generar_cuotas_sobre_compra_ya_pagada(self):
-        purchase = Purchase.objects.create(supplier=self.supplier, document_number='CR-3',
-                                           total=Decimal('40.00'), estado='PAGADA')
-        with self.assertRaises(ValidationError):
-            generar_cuotas_compra(purchase, 2)
 
 
 # =====================================================================
@@ -202,31 +169,7 @@ class RegistrarPagosVentaTests(TestCase):
 
 
 # =====================================================================
-# Registro de pagos — compra (mismo algoritmo; se valida lo esencial)
-# =====================================================================
-class RegistrarPagosCompraTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        _, _, cls.supplier, _ = _make_purchase_catalog()
-
-    def setUp(self):
-        self.purchase = Purchase.objects.create(supplier=self.supplier, document_number='CR-P1',
-                                                 total=Decimal('200.00'))
-        self.cuotas = generar_cuotas_compra(self.purchase, 2)  # 100, 100
-
-    def test_pagar_todas_las_cuotas_marca_la_compra_pagada(self):
-        registrar_pagos_compra([(c, c.saldo) for c in self.cuotas], date.today())
-        self.purchase.refresh_from_db()
-        self.assertEqual(self.purchase.saldo, Decimal('0.00'))
-        self.assertEqual(self.purchase.estado, 'PAGADA')
-
-    def test_pago_mayor_al_saldo_rechazado(self):
-        with self.assertRaises(ValidationError):
-            registrar_pagos_compra([(self.cuotas[0], Decimal('999.00'))], date.today())
-
-
-# =====================================================================
-# Vistas: registro del tipo de pago al crear factura/compra
+# Vista: registro del tipo de pago al crear la factura
 # =====================================================================
 class InvoiceCreateTipoPagoTests(TestCase):
     @classmethod
@@ -271,40 +214,6 @@ class InvoiceCreateTipoPagoTests(TestCase):
         r = self._post({'tipo_pago': 'CREDITO', 'num_cuotas': ''})
         self.assertEqual(Invoice.objects.count(), before)
         self.assertIn('cuotas mensuales', r.content.decode().lower())
-
-
-class PurchaseCreateTipoPagoTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.brand, cls.group, cls.supplier, cls.product = _make_purchase_catalog()
-        cls.admin = User.objects.create_superuser('admin_pp', 'a@a.com', 'pass12345')
-
-    def setUp(self):
-        self.client = Client()
-        self.client.force_login(self.admin)
-
-    def _post(self, document, extra=None):
-        data = {
-            'supplier': self.supplier.pk, 'document_number': document,
-            'details-TOTAL_FORMS': '1', 'details-INITIAL_FORMS': '0',
-            'details-MIN_NUM_FORMS': '0', 'details-MAX_NUM_FORMS': '1000',
-            'details-0-product': self.product.pk, 'details-0-quantity': '2', 'details-0-unit_cost': '10.00',
-        }
-        data.update(extra or {})
-        return self.client.post('/purchases/create/', data, follow=True)
-
-    def test_sin_tipo_pago_en_el_post_usa_contado_por_defecto(self):
-        self._post('PP-1')
-        purchase = Purchase.objects.latest('id')
-        self.assertEqual(purchase.tipo_pago, 'CONTADO')
-        self.assertEqual(purchase.estado, 'PAGADA')
-        self.assertEqual(purchase.saldo, Decimal('0.00'))
-
-    def test_credito_genera_las_cuotas_solicitadas(self):
-        self._post('PP-2', {'tipo_pago': 'CREDITO', 'num_cuotas': '5'})
-        purchase = Purchase.objects.latest('id')
-        self.assertEqual(purchase.tipo_pago, 'CREDITO')
-        self.assertEqual(CuotaCompra.objects.filter(compra=purchase).count(), 5)
 
 
 # =====================================================================
@@ -352,23 +261,11 @@ class CreditosVentasPermissionTests(TestCase):
 
         cls.invoice = Invoice.objects.create(customer=cls.customer, total=Decimal('100.00'))
         generar_cuotas_venta(cls.invoice, 2)
-        cls.purchase = Purchase.objects.create(supplier=cls.supplier, document_number='PERM-1',
-                                               total=Decimal('50.00'))
-        generar_cuotas_compra(cls.purchase, 2)
 
     def test_vendedor_accede_a_cuotas_de_venta(self):
         c = Client(); c.force_login(self.vendedor)
         self.assertEqual(c.get('/creditos/ventas/pendientes/').status_code, 200)
         self.assertEqual(c.get(f'/creditos/ventas/factura/{self.invoice.pk}/').status_code, 200)
-
-    def test_vendedor_no_accede_a_cuotas_de_compra(self):
-        c = Client(); c.force_login(self.vendedor)
-        self.assertEqual(c.get('/creditos/compras/pendientes/').status_code, 403)
-
-    def test_analista_compras_accede_a_cuotas_de_compra(self):
-        c = Client(); c.force_login(self.comprador)
-        self.assertEqual(c.get('/creditos/compras/pendientes/').status_code, 200)
-        self.assertEqual(c.get(f'/creditos/compras/compra/{self.purchase.pk}/').status_code, 200)
 
     def test_analista_compras_no_accede_a_cuotas_de_venta(self):
         c = Client(); c.force_login(self.comprador)

@@ -1,12 +1,10 @@
-"""Lógica de negocio del crédito de ventas y compras.
+"""Lógica de negocio del crédito de ventas.
 
-Las funciones públicas vienen en pares venta/compra
-(`generar_cuotas_venta`/`generar_cuotas_compra`,
-`registrar_pagos_venta`/`registrar_pagos_compra`) porque son el mismo
-algoritmo aplicado a dos pares de modelos distintos (Invoice+CuotaVenta y
-Purchase+CuotaCompra); internamente comparten una única implementación
-(`_generar_cuotas`/`_registrar_pagos`) parametrizada por modelo y nombre de
-FK, para no duplicar la lógica dos veces.
+La implementación real (`_generar_cuotas`/`_registrar_pagos`) está
+parametrizada por modelo y nombre de FK porque el algoritmo es idéntico para
+ventas y compras: la app creditos_compras la reutiliza aplicándola a
+Purchase + CuotaCompra en lugar de Invoice + CuotaVenta, así la lógica no se
+duplica en dos apps.
 """
 from calendar import monthrange
 from decimal import Decimal, ROUND_DOWN
@@ -17,7 +15,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from billing.models import PaymentLog
-from .models import CuotaVenta, PagoCuotaVenta, CuotaCompra, PagoCuotaCompra
+from .models import CuotaVenta, PagoCuotaVenta
 
 
 def _add_months(base_date, months):
@@ -159,13 +157,3 @@ def generar_cuotas_venta(invoice, num_cuotas):
 def registrar_pagos_venta(cuotas_con_montos, fecha, observacion='', user=None):
     return _registrar_pagos(cuotas_con_montos, fecha, observacion,
                             pago_model=PagoCuotaVenta, doc_attr='factura', user=user)
-
-
-# --- API pública: compra ---
-def generar_cuotas_compra(purchase, num_cuotas):
-    return _generar_cuotas(purchase, num_cuotas, cuota_model=CuotaCompra, doc_attr='compra')
-
-
-def registrar_pagos_compra(cuotas_con_montos, fecha, observacion='', user=None):
-    return _registrar_pagos(cuotas_con_montos, fecha, observacion,
-                            pago_model=PagoCuotaCompra, doc_attr='compra', user=user)

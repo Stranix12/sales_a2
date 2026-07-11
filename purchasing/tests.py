@@ -107,7 +107,7 @@ class PurchasePermissionTests(TestCase):
 
 class PurchaseDeleteTests(TestCase):
     """Una compra a crédito tiene CuotaCompra con on_delete=PROTECT: borrarla
-    debe mostrar un mensaje claro, no un 500 (ver creditos_ventas.models)."""
+    debe mostrar un mensaje claro, no un 500 (ver creditos_compras.models)."""
     @classmethod
     def setUpTestData(cls):
         cls.brand, cls.group, cls.supplier, cls.product = _make_catalog()
@@ -118,7 +118,7 @@ class PurchaseDeleteTests(TestCase):
         self.client.force_login(self.admin)
 
     def test_eliminar_compra_con_cuotas_no_revienta_y_avisa(self):
-        from creditos_ventas.services import generar_cuotas_compra
+        from creditos_compras.services import generar_cuotas_compra
         purchase = Purchase.objects.create(supplier=self.supplier, document_number='DEL-CR-1',
                                            total=Decimal('60.00'))
         generar_cuotas_compra(purchase, 3)

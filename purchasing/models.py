@@ -6,7 +6,7 @@ from billing.models import Supplier, Product, Invoice   # Reutilizamos modelos d
  
 class Purchase(models.Model):
     """Cabecera de compra. Documenta una adquisición a un proveedor."""
-    # --- Compras a crédito (app creditos_ventas) — mismos choices que
+    # --- Compras a crédito (app creditos_compras) — mismos choices que
     # billing.Invoice, importados para no duplicar la tupla.
     TIPO_PAGO = Invoice.TIPO_PAGO
     ESTADO_CREDITO = Invoice.ESTADO_CREDITO

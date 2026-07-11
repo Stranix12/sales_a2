@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from billing.models import Product
-from creditos_ventas.services import generar_cuotas_compra
+from creditos_compras.services import generar_cuotas_compra
 from .models import Purchase, PurchaseDetail
 from .forms import PurchaseForm, PurchaseDetailFormSet, PurchaseFilterForm
 from .exports import export_purchase_excel, export_purchase_pdf

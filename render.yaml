@@ -14,7 +14,10 @@ services:
     # (get_or_create); createsuperuser --noinput fallaría en el 2º deploy en
     # adelante porque el usuario ya existe, por eso va envuelto en
     # "|| true" (solo para ESE paso, no para todo el build).
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py setup_roles && (python manage.py createsuperuser --noinput || true)"
+    # remove_stale_contenttypes: al mover CuotaCompra/PagoCuotaCompra de
+    # creditos_ventas a creditos_compras quedan content types (y permisos)
+    # huérfanos de la app anterior; este paso los limpia antes de setup_roles.
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py remove_stale_contenttypes --noinput && python manage.py setup_roles && (python manage.py createsuperuser --noinput || true)"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
       - key: PYTHON_VERSION

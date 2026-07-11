@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     'purchasing',
     'security',
     'creditos_ventas',
+    'creditos_compras',
     'facturacion_electronica',
 
 ]

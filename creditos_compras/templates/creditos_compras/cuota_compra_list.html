@@ -24,7 +24,7 @@
     </div>
     <div class="col-md-3 d-flex align-items-end gap-2">
       <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i>Buscar</button>
-      <a href="{% url 'creditos_ventas:cuota_compra_list' %}" class="btn btn-outline-secondary">Limpiar</a>
+      <a href="{% url 'creditos_compras:cuota_compra_list' %}" class="btn btn-outline-secondary">Limpiar</a>
     </div>
   </div>
   {% include 'billing/_column_selector.html' %}
@@ -57,7 +57,7 @@
           </td>
           {% endfor %}
           <td class="row-actions">
-            <a href="{% url 'creditos_ventas:plan_cuotas_compra' item.compra_id %}" class="act-btn act-view" title="Ver plan de cuotas"><i class="bi bi-eye"></i></a>
+            <a href="{% url 'creditos_compras:plan_cuotas_compra' item.compra_id %}" class="act-btn act-view" title="Ver plan de cuotas"><i class="bi bi-eye"></i></a>
           </td>
         </tr>
         {% empty %}

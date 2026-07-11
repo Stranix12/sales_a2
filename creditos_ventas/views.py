@@ -1,3 +1,10 @@
+"""Pantallas del crédito de ventas: consulta de cuotas pendientes, plan de
+cuotas de una factura, registro de pagos y comprobante PDF de cada pago.
+
+Los helpers _contraparte_info/_render_plan/_procesar_pago están
+parametrizados (documento, tipo, nombres de URL) porque creditos_compras
+los reutiliza para el mismo flujo aplicado a las compras.
+"""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
@@ -7,16 +14,13 @@ from django.views.generic import ListView
 
 from billing.mixins import ExportListMixin
 from billing.models import Invoice
-from purchasing.models import Purchase
 from .forms import RegistrarPagoForm, CuotaPagoFormSet, CuotaFilterForm
-from .models import CuotaVenta, PagoCuotaVenta, CuotaCompra, PagoCuotaCompra
-from .receipts import pago_cuota_venta_pdf_response, pago_cuota_compra_pdf_response
-from .services import (
-    registrar_pagos_venta, registrar_pagos_compra,
-)
+from .models import CuotaVenta, PagoCuotaVenta
+from .receipts import pago_cuota_venta_pdf_response
+from .services import registrar_pagos_venta
 
 
-# ============================================================= listados =====
+# ============================================================= listado =====
 class CuotaVentaListView(ExportListMixin, PermissionRequiredMixin, ListView):
     """Consulta de cuotas de venta (por defecto, solo las pendientes)."""
     model = CuotaVenta
@@ -53,42 +57,6 @@ class CuotaVentaListView(ExportListMixin, PermissionRequiredMixin, ListView):
         return ctx
 
 
-class CuotaCompraListView(ExportListMixin, PermissionRequiredMixin, ListView):
-    """Consulta de cuotas de compra (por defecto, solo las pendientes)."""
-    model = CuotaCompra
-    permission_required = 'creditos_ventas.view_cuotacompra'
-    template_name = 'creditos_ventas/cuota_compra_list.html'
-    context_object_name = 'items'
-    paginate_by = 15
-    export_title = 'Cuotas de Compra'
-    columns_session_key = 'cuota_compra_columns'
-    export_columns = [
-        {'key': 'compra',             'label': 'Compra',       'field': 'compra.document_number',  'default': True},
-        {'key': 'proveedor',          'label': 'Proveedor',    'field': 'compra.supplier',          'default': True},
-        {'key': 'numero',             'label': '# Cuota',      'field': 'numero',                   'default': True},
-        {'key': 'fecha_vencimiento',  'label': 'Vencimiento',  'field': 'fecha_vencimiento',        'default': True},
-        {'key': 'valor',              'label': 'Valor',        'field': 'valor',                    'default': True},
-        {'key': 'saldo',              'label': 'Saldo',        'field': 'saldo',                    'default': True},
-        {'key': 'estado',             'label': 'Estado',       'field': 'estado',                   'default': True},
-    ]
-
-    def get_queryset(self):
-        qs = super().get_queryset().select_related('compra', 'compra__supplier')
-        data = self.request.GET.copy()
-        data.setdefault('estado', 'PENDIENTE')
-        self.filter_form = CuotaFilterForm(data)
-        self.filter_form.is_valid()
-        estado = self.filter_form.cleaned_data.get('estado')
-        if estado:
-            qs = qs.filter(estado=estado)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx['filter_form'] = self.filter_form
-        return ctx
-
-
 # ======================================================= plan de cuotas =====
 def _contraparte_info(documento, tipo):
     """(contraparte, etiqueta, título) — venta muestra el cliente, compra el proveedor."""
@@ -97,17 +65,13 @@ def _contraparte_info(documento, tipo):
     return documento.supplier, 'Proveedor', f'Compra #{documento.pk} ({documento.document_number})'
 
 
-def _render_plan(request, documento, *, tipo, cuotas, pagos, template='creditos_ventas/plan_cuotas.html'):
+def _render_plan(request, documento, *, tipo, cuotas, pagos, volver_url, pagar_url, pdf_url,
+                 template='creditos_ventas/plan_cuotas.html'):
     contraparte, contraparte_label, titulo = _contraparte_info(documento, tipo)
-    if tipo == 'venta':
-        volver_url, pagar_url = 'billing:invoice_detail', 'creditos_ventas:pagar_cuotas_venta'
-    else:
-        volver_url, pagar_url = 'purchasing:purchase_detail', 'creditos_ventas:pagar_cuotas_compra'
-
     return render(request, template, {
         'documento': documento, 'tipo': tipo, 'cuotas': cuotas, 'pagos': pagos,
         'contraparte': contraparte, 'contraparte_label': contraparte_label,
-        'titulo': titulo, 'volver_url': volver_url, 'pagar_url': pagar_url,
+        'titulo': titulo, 'volver_url': volver_url, 'pagar_url': pagar_url, 'pdf_url': pdf_url,
     })
 
 
@@ -117,16 +81,12 @@ def plan_cuotas_venta(request, factura_id):
     invoice = get_object_or_404(Invoice.objects.select_related('customer'), pk=factura_id)
     cuotas = invoice.cuotas.all()
     pagos = PagoCuotaVenta.objects.filter(cuota__factura=invoice).select_related('cuota')
-    return _render_plan(request, invoice, tipo='venta', cuotas=cuotas, pagos=pagos)
-
-
-@login_required
-@permission_required('creditos_ventas.view_cuotacompra', raise_exception=True)
-def plan_cuotas_compra(request, compra_id):
-    purchase = get_object_or_404(Purchase.objects.select_related('supplier'), pk=compra_id)
-    cuotas = purchase.cuotas.all()
-    pagos = PagoCuotaCompra.objects.filter(cuota__compra=purchase).select_related('cuota')
-    return _render_plan(request, purchase, tipo='compra', cuotas=cuotas, pagos=pagos)
+    return _render_plan(
+        request, invoice, tipo='venta', cuotas=cuotas, pagos=pagos,
+        volver_url='billing:invoice_detail',
+        pagar_url='creditos_ventas:pagar_cuotas_venta',
+        pdf_url='creditos_ventas:pago_cuota_venta_pdf',
+    )
 
 
 # ============================================================= pagos =====
@@ -178,17 +138,6 @@ def pagar_cuotas_venta(request, factura_id):
     )
 
 
-@login_required
-@permission_required('creditos_ventas.add_pagocuotacompra', raise_exception=True)
-def pagar_cuotas_compra(request, compra_id):
-    purchase = get_object_or_404(Purchase, pk=compra_id)
-    pendientes = list(purchase.cuotas.filter(estado='PENDIENTE'))
-    return _procesar_pago(
-        request, purchase, tipo='compra', pendientes=pendientes, registrar_fn=registrar_pagos_compra,
-        plan_url_name='creditos_ventas:plan_cuotas_compra', plan_kwarg='compra_id',
-    )
-
-
 # ================================================ comprobantes de pago =====
 @login_required
 @permission_required('creditos_ventas.view_pagocuotaventa', raise_exception=True)
@@ -196,11 +145,3 @@ def pago_cuota_venta_pdf(request, pago_id):
     pago = get_object_or_404(
         PagoCuotaVenta.objects.select_related('cuota__factura__customer'), pk=pago_id)
     return pago_cuota_venta_pdf_response(pago)
-
-
-@login_required
-@permission_required('creditos_ventas.view_pagocuotacompra', raise_exception=True)
-def pago_cuota_compra_pdf(request, pago_id):
-    pago = get_object_or_404(
-        PagoCuotaCompra.objects.select_related('cuota__compra__supplier'), pk=pago_id)
-    return pago_cuota_compra_pdf_response(pago)

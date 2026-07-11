@@ -86,7 +86,7 @@
             <div class="text-muted small text-uppercase fw-semibold mb-1"><i class="bi bi-calendar-check me-1"></i>Plan de crédito</div>
             <p class="mb-0">Saldo pendiente: <strong>${{ purchase.saldo }}</strong></p>
           </div>
-          <a href="{% url 'creditos_ventas:plan_cuotas_compra' purchase.pk %}" class="btn btn-outline-primary">
+          <a href="{% url 'creditos_compras:plan_cuotas_compra' purchase.pk %}" class="btn btn-outline-primary">
             <i class="bi bi-list-check me-1"></i>Ver plan de cuotas
           </a>
         </div>

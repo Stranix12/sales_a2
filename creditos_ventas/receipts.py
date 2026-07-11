@@ -1,11 +1,13 @@
-"""Comprobante de pago de una cuota (venta o compra) — un PDF imprimible por
-cada abono registrado, distinto del PDF completo de la factura/compra
-(ver billing.invoice_export / purchasing.exports).
+"""Comprobante de pago de una cuota de venta — un PDF imprimible por cada
+abono registrado, distinto del PDF completo de la factura
+(ver billing.invoice_export).
 
 Diseño: banda de cabecera con la marca + N.º de comprobante, datos de la
 contraparte e información del crédito lado a lado, detalle de la cuota pagada
 (cabecera verde) y estado del crédito con barra de progreso. Usa la misma
-paleta que el RIDE (facturacion_electronica.ride) para mantener coherencia."""
+paleta que el RIDE (facturacion_electronica.ride) para mantener coherencia.
+El constructor _build_receipt_pdf está parametrizado por contraparte y datos
+del crédito porque creditos_compras lo reutiliza para el recibo de compras."""
 from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 
@@ -244,32 +246,6 @@ def build_pago_cuota_venta_pdf_bytes(pago):
     )
 
 
-def build_pago_cuota_compra_pdf_bytes(pago):
-    cuota = pago.cuota
-    purchase = cuota.compra
-    supplier = purchase.supplier
-    cuotas = list(purchase.cuotas.all())
-    total_credito, restantes, proxima = _resumen_credito(cuotas, purchase.saldo)
-    return _build_receipt_pdf(
-        numero_comprobante=f'CP-{pago.pk:06d}',
-        contraparte_titulo='DATOS DEL PROVEEDOR',
-        contraparte_rows=[
-            ('Proveedor', str(supplier)),
-            ('Correo', getattr(supplier, 'email', None) or '—'),
-            ('Teléfono', getattr(supplier, 'phone', None) or '—'),
-        ],
-        credito_rows=[
-            ('N.º de compra', f'#{purchase.pk}'),
-            ('Documento', purchase.document_number or '—'),
-            ('Fecha', _fecha(purchase.purchase_date)),
-            ('Forma de pago', f'Crédito a {len(cuotas)} meses'),
-            ('Total del documento', _money(purchase.total)),
-        ],
-        pago=pago, cuota=cuota, total_cuotas=len(cuotas), total_credito=total_credito,
-        saldo_documento=purchase.saldo, cuotas_restantes=restantes, proxima_cuota=proxima,
-    )
-
-
 def _response(pdf_bytes, filename):
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -280,9 +256,3 @@ def pago_cuota_venta_pdf_response(pago):
     stamp = timezone.localtime().strftime('%Y%m%d_%H%M')
     filename = f'Recibo_Factura{pago.cuota.factura_id}_Cuota{pago.cuota.numero}_{stamp}.pdf'
     return _response(build_pago_cuota_venta_pdf_bytes(pago), filename)
-
-
-def pago_cuota_compra_pdf_response(pago):
-    stamp = timezone.localtime().strftime('%Y%m%d_%H%M')
-    filename = f'Recibo_Compra{pago.cuota.compra_id}_Cuota{pago.cuota.numero}_{stamp}.pdf'
-    return _response(build_pago_cuota_compra_pdf_bytes(pago), filename)

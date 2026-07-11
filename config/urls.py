@@ -9,6 +9,9 @@ urlpatterns = [
     path('', include('billing.urls')),
     path('purchases/', include('purchasing.urls')),
     path('security/', include('security.urls')),
+    # creditos/compras/ va ANTES que creditos/ para que las rutas del crédito
+    # de compras (app creditos_compras) conserven las URLs que ya existían.
+    path('creditos/compras/', include('creditos_compras.urls')),
     path('creditos/', include('creditos_ventas.urls')),
     path('facturacion/', include('facturacion_electronica.urls')),
 ]

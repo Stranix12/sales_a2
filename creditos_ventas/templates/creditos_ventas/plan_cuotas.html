@@ -95,11 +95,7 @@
             <td class="text-end">${{ pago.valor }}</td>
             <td class="text-muted small">{{ pago.observacion|default:'—' }}</td>
             <td class="text-center">
-              {% if tipo == 'venta' %}
-              <a href="{% url 'creditos_ventas:pago_cuota_venta_pdf' pago.pk %}" class="act-btn act-edit" title="Descargar comprobante"><i class="bi bi-file-earmark-pdf"></i></a>
-              {% else %}
-              <a href="{% url 'creditos_ventas:pago_cuota_compra_pdf' pago.pk %}" class="act-btn act-edit" title="Descargar comprobante"><i class="bi bi-file-earmark-pdf"></i></a>
-              {% endif %}
+              <a href="{% url pdf_url pago.pk %}" class="act-btn act-edit" title="Descargar comprobante"><i class="bi bi-file-earmark-pdf"></i></a>
             </td>
           </tr>
           {% empty %}

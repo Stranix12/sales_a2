@@ -1,13 +1,13 @@
 from django import forms
 from django.forms import inlineformset_factory
 from billing.models import Supplier
-from creditos_ventas.forms import tipo_pago_field, num_cuotas_field, validar_tipo_pago
+from creditos_compras.forms import tipo_pago_field, num_cuotas_field, validar_tipo_pago
 from .models import Purchase, PurchaseDetail
 
 
 class PurchaseForm(forms.ModelForm):
     """tipo_pago/num_cuotas: ver el comentario equivalente en
-    billing.forms.InvoiceForm — mismo patrón, misma app creditos_ventas."""
+    billing.forms.InvoiceForm — mismo patrón, aquí con la app creditos_compras."""
     tipo_pago = tipo_pago_field()
     num_cuotas = num_cuotas_field()
 
