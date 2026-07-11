@@ -6,6 +6,7 @@ Corre con: python manage.py test facturacion_electronica
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, User
+from django.core import mail
 from django.core.management import call_command
 from django.test import Client, TestCase
 from lxml import etree
@@ -170,6 +171,30 @@ class VistasComprobanteTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.invoice.comprobante.refresh_from_db()
         self.assertEqual(self.invoice.comprobante.estado, ComprobanteElectronico.FIRMADO)
+
+    def test_autorizar_reenvia_correo_con_xml_adjunto(self):
+        c = Client(); c.force_login(self.admin)
+        # Firmado -> Recibido -> Autorizado: recién en la última no envía correo.
+        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+        self.assertEqual(len(mail.outbox), 0)
+        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+
+        self.invoice.comprobante.refresh_from_db()
+        self.assertEqual(self.invoice.comprobante.estado, ComprobanteElectronico.AUTORIZADO)
+        self.assertEqual(len(mail.outbox), 1)
+        enviado = mail.outbox[0]
+        self.assertEqual(enviado.to, [self.customer.email])
+        xml_adjuntos = [a for a in enviado.attachments if a[0].endswith('.xml')]
+        self.assertEqual(len(xml_adjuntos), 1)
+
+    def test_reenviar_sobre_autorizado_no_duplica_correo(self):
+        c = Client(); c.force_login(self.admin)
+        for _ in range(3):
+            c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+        self.assertEqual(len(mail.outbox), 1)
+        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')  # ya autorizado: idempotente
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_descargar_xml_devuelve_xml(self):
         c = Client(); c.force_login(self.admin)

@@ -5,6 +5,8 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 
 from billing.models import Invoice
+from shared.emails import send_invoice_email
+from .models import ComprobanteElectronico
 from .ride import ride_pdf_response
 from .services import generar_comprobante, avanzar_estado
 
@@ -39,6 +41,12 @@ def enviar_al_sri(request, invoice_id):
         avanzar_estado(comprobante)
         comprobante.refresh_from_db()
         messages.success(request, f'Comprobante enviado al SRI: ahora está {comprobante.get_estado_display().upper()}.')
+        if comprobante.estado == ComprobanteElectronico.AUTORIZADO:
+            # Recién autorizado: reenvía la factura al cliente con el RIDE
+            # final y el XML autorizado adjuntos (fuera de cualquier
+            # transacción, como el resto de los envíos de correo del proyecto).
+            if send_invoice_email(invoice):
+                messages.info(request, 'Se reenvió la factura al cliente con el XML autorizado adjunto.')
     return redirect('billing:invoice_detail', pk=invoice_id)
 
 
