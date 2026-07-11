@@ -47,9 +47,28 @@ class ForcePasswordChangeView(PasswordChangeView):
 
 # === USUARIOS (solo Administrador) ===
 class UserListView(AdminOnlyMixin, ListView):
+    """Listado de usuarios con tarjetas por rol: cada tarjeta filtra la tabla
+    (?rol=<id> | ?rol=sin-rol | sin parámetro = todos)."""
     model = User
     template_name = 'security/user_list.html'
     context_object_name = 'items'
+
+    def get_queryset(self):
+        qs = User.objects.prefetch_related('groups').order_by('username')
+        self.rol = self.request.GET.get('rol') or ''
+        if self.rol == 'sin-rol':
+            qs = qs.filter(groups__isnull=True)
+        elif self.rol.isdigit():
+            qs = qs.filter(groups__pk=self.rol)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['roles'] = _roles_with_colors()  # nombre + color + user_count
+        ctx['total_users'] = User.objects.count()
+        ctx['sin_rol_count'] = User.objects.filter(groups__isnull=True).count()
+        ctx['rol_activo'] = self.rol
+        return ctx
 
 class UserCreateView(AdminOnlyMixin, CreateView):
     """No hay registro público: solo el Administrador crea usuarios."""

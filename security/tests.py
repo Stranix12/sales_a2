@@ -1,13 +1,17 @@
-"""Suite de tests de security: recuperación de contraseña por correo
-(usa las vistas incluidas de django.contrib.auth, con plantillas propias).
+"""Suite de tests de security: recuperación de contraseña por correo,
+correo de bienvenida al inscribir usuarios, y roles (pantallas + acceso).
 
 Corre con: python manage.py test security
 """
 import re
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.core import mail
+from django.core.management import call_command
 from django.test import Client, TestCase
+
+from billing.models import Customer
+from .models import UserSecurityProfile
 
 
 class PasswordResetFlowTests(TestCase):
@@ -76,3 +80,115 @@ class PasswordResetFlowTests(TestCase):
     def test_link_de_login_a_recuperacion_presente(self):
         r = self.client.get('/accounts/login/')
         self.assertIn('¿Olvidaste tu contraseña?', r.content.decode())
+
+
+# =====================================================================
+# Correo de bienvenida al inscribir un usuario
+# =====================================================================
+class UserCreateWelcomeEmailTests(TestCase):
+    """Al crear un usuario, le debe llegar el correo de bienvenida con su
+    contraseña temporal, el rol asignado y el link de acceso; y el sistema
+    debe obligarlo a cambiar esa contraseña en su primer login."""
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+        cls.admin = User.objects.create_superuser('admin_welcome', 'a@a.com', 'pass12345')
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def _post(self, extra=None):
+        data = {
+            'username': 'nuevo_vendedor',
+            'first_name': 'Davis Steven', 'last_name': 'Yanez Gualpa',
+            'email': 'nuevo@example.com',
+            'role': Group.objects.get(name='Vendedor').pk,
+            'auto_password': 'on', 'password1': '', 'password2': '',
+        }
+        data.update(extra or {})
+        return self.client.post('/security/users/create/', data, follow=True)
+
+    def test_crear_usuario_envia_correo_de_bienvenida(self):
+        self._post()
+        self.assertTrue(User.objects.filter(username='nuevo_vendedor').exists())
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, ['nuevo@example.com'])
+        self.assertIn('Bienvenido', correo.subject)
+        self.assertIn('dyanezg', correo.body)           # contraseña temporal generada
+        self.assertIn('/accounts/login/', correo.body)  # link de acceso
+        self.assertIn('Vendedor', correo.body)          # rol asignado
+
+    def test_contrasena_temporal_valida_y_cambio_obligatorio(self):
+        self._post()
+        user = User.objects.get(username='nuevo_vendedor')
+        self.assertTrue(user.check_password('dyanezg'))
+        self.assertTrue(UserSecurityProfile.objects.get(user=user).must_change_password)
+
+    def test_rol_cliente_vincula_el_customer_y_envia_correo(self):
+        customer = Customer.objects.create(
+            dni='1710034065', first_name='Pedro', last_name='Yanez',
+            email='pedro@example.com')
+        self._post({
+            'username': 'cliente_portal', 'first_name': 'Pedro', 'last_name': 'Yanez',
+            'email': 'pedro@example.com',
+            'role': Group.objects.get(name='Cliente').pk,
+            'customer': customer.pk,
+        })
+        user = User.objects.get(username='cliente_portal')
+        customer.refresh_from_db()
+        self.assertEqual(customer.user, user)  # cuenta vinculada a su cliente
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ['pedro@example.com'])
+
+    def test_rol_cliente_sin_customer_es_rechazado(self):
+        r = self._post({'role': Group.objects.get(name='Cliente').pk})
+        self.assertFalse(User.objects.filter(username='nuevo_vendedor').exists())
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIn('requiere elegir', r.content.decode())
+
+
+# =====================================================================
+# Roles: pantallas y control de acceso
+# =====================================================================
+class RolesPantallasTests(TestCase):
+    """La consola de roles y el listado de usuarios (con tarjetas por rol)
+    solo son accesibles para el Administrador."""
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+        cls.admin = User.objects.create_superuser('admin_roles', 'a@a.com', 'pass12345')
+        cls.vendedor = User.objects.create_user('vendedor_roles', password='pass12345')
+        cls.vendedor.groups.add(Group.objects.get(name='Vendedor'))
+
+    def test_setup_roles_crea_los_cuatro_roles(self):
+        nombres = set(Group.objects.values_list('name', flat=True))
+        self.assertTrue({'Administrador', 'Vendedor', 'Analista de Compras', 'Cliente'} <= nombres)
+
+    def test_admin_ve_la_consola_de_roles(self):
+        c = Client(); c.force_login(self.admin)
+        r = c.get('/security/roles/', follow=True)  # redirige al primer rol
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('Roles y permisos', r.content.decode())
+
+    def test_admin_ve_usuarios_con_tarjetas_y_filtro_por_rol(self):
+        c = Client(); c.force_login(self.admin)
+        r = c.get('/security/users/')
+        html = r.content.decode()
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('ur-card', html)          # tarjetas de roles
+        self.assertIn('Vendedor', html)
+        rol = Group.objects.get(name='Vendedor')
+        r = c.get(f'/security/users/?rol={rol.pk}')
+        # Filtrado: en las filas de la tabla solo sale el vendedor (el nombre
+        # del admin sí aparece en el sidebar como usuario logueado, por eso
+        # se compara contra la celda de la tabla y no contra todo el HTML).
+        self.assertContains(r, '<div class="cell-primary">vendedor_roles</div>', html=True)
+        self.assertNotContains(r, '<div class="cell-primary">admin_roles</div>', html=True)
+
+    def test_no_administrador_no_accede_a_seguridad(self):
+        c = Client(); c.force_login(self.vendedor)
+        for url in ['/security/users/', '/security/roles/', '/security/users/create/']:
+            r = c.get(url)
+            self.assertEqual(r.status_code, 302, url)  # lo saca a la página principal

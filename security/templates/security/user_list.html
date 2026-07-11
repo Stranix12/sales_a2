@@ -1,6 +1,27 @@
 {% extends 'billing/base.html' %}
 {% block title %}Users{% endblock %}
 {% block content %}
+<style>
+  .ur-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .ur-card {
+    --rc: #33459b;
+    display: flex; align-items: center; gap: 12px;
+    background: #fff; border: 1.5px solid #e6e8f0; border-radius: 14px;
+    padding: 14px 16px; text-decoration: none; color: inherit;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .ur-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(20, 27, 60, .08); border-color: var(--rc); color: inherit; }
+  .ur-card.active { border-color: var(--rc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rc) 18%, transparent); }
+  .ur-card-avatar {
+    width: 40px; height: 40px; border-radius: 12px; flex: 0 0 auto;
+    display: grid; place-items: center; font-weight: 700; color: #fff;
+    background: var(--rc); font-size: 1rem;
+  }
+  .ur-card-name { font-weight: 600; line-height: 1.15; }
+  .ur-card-meta { font-size: .8rem; color: #6b7280; }
+  .ur-card.active .ur-card-name { color: var(--rc); }
+</style>
+
 <div class="page-head">
   <div class="page-head-title">
     <h2><span class="head-ico"><i class="bi bi-person-badge"></i></span>Usuarios</h2>
@@ -9,6 +30,36 @@
   <div class="page-head-actions">
     <a href="{% url 'security:user_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Nuevo usuario</a>
   </div>
+</div>
+
+{# Tarjetas por rol: cada una filtra la tabla de abajo #}
+<div class="ur-cards">
+  <a href="{% url 'security:user_list' %}" class="ur-card{% if not rol_activo %} active{% endif %}" style="--rc:#1c2447">
+    <span class="ur-card-avatar"><i class="bi bi-people"></i></span>
+    <span>
+      <span class="ur-card-name d-block">Todos</span>
+      <span class="ur-card-meta">{{ total_users }} usuario{{ total_users|pluralize:"s" }}</span>
+    </span>
+  </a>
+  {% for g in roles %}
+  <a href="{% url 'security:user_list' %}?rol={{ g.pk }}"
+     class="ur-card{% if rol_activo == g.pk|stringformat:'s' %} active{% endif %}" style="--rc:{{ g.color }}">
+    <span class="ur-card-avatar">{{ g.name|first|upper }}</span>
+    <span>
+      <span class="ur-card-name d-block">{{ g.name }}</span>
+      <span class="ur-card-meta">{{ g.user_count }} usuario{{ g.user_count|pluralize:"s" }}</span>
+    </span>
+  </a>
+  {% endfor %}
+  {% if sin_rol_count %}
+  <a href="{% url 'security:user_list' %}?rol=sin-rol" class="ur-card{% if rol_activo == 'sin-rol' %} active{% endif %}" style="--rc:#6b7280">
+    <span class="ur-card-avatar"><i class="bi bi-person-dash"></i></span>
+    <span>
+      <span class="ur-card-name d-block">Sin rol</span>
+      <span class="ur-card-meta">{{ sin_rol_count }} usuario{{ sin_rol_count|pluralize:"s" }}</span>
+    </span>
+  </a>
+  {% endif %}
 </div>
 
 <div class="data-table table-fade">
@@ -48,7 +99,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5"><div class="empty-state"><i class="bi bi-people"></i>No hay usuarios.</div></td></tr>
+        <tr><td colspan="5"><div class="empty-state"><i class="bi bi-people"></i>No hay usuarios con este rol.</div></td></tr>
         {% endfor %}
       </tbody>
     </table>

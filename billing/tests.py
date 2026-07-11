@@ -631,3 +631,49 @@ class InvoiceDeleteTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())  # no se borró
         self.assertIn('plan de cuotas', r.content.decode().lower())
+
+
+class InvoiceEmailTests(TestCase):
+    """Al crear una factura, el cliente debe recibir el correo con el detalle
+    y el PDF (RIDE) adjunto; sin email registrado no se envía pero la
+    facturación no se rompe."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_mail', 'a@a.com', 'pass12345')
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def _crear_factura(self, customer):
+        return self.client.post('/invoices/create/', {
+            'customer': customer.pk,
+            'details-TOTAL_FORMS': '1', 'details-INITIAL_FORMS': '0',
+            'details-MIN_NUM_FORMS': '0', 'details-MAX_NUM_FORMS': '1000',
+            'details-0-product': self.product.pk, 'details-0-quantity': '2',
+            'details-0-unit_price': '10.00',
+        }, follow=True)
+
+    def test_crear_factura_envia_correo_al_cliente_con_pdf(self):
+        from django.core import mail
+        self._crear_factura(self.customer)
+        invoice = Invoice.objects.latest('id')
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, [self.customer.email])
+        self.assertIn(invoice.numero_factura, correo.subject)
+        # Adjunto: el PDF de la factura (el XML se adjunta al autorizar el SRI)
+        self.assertEqual(len(correo.attachments), 1)
+        nombre, contenido, mimetype = correo.attachments[0]
+        self.assertTrue(nombre.endswith('.pdf'))
+        self.assertEqual(mimetype, 'application/pdf')
+        self.assertTrue(contenido.startswith(b'%PDF'))
+
+    def test_cliente_sin_email_no_envia_pero_la_factura_se_crea(self):
+        from django.core import mail
+        sin_email = Customer.objects.create(dni='0912345678', first_name='Sin', last_name='Correo')
+        before = Invoice.objects.count()
+        self._crear_factura(sin_email)
+        self.assertEqual(Invoice.objects.count(), before + 1)  # la factura sí se creó
+        self.assertEqual(len(mail.outbox), 0)                  # sin correo, sin excepción
