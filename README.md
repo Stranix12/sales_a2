@@ -20,31 +20,26 @@ README está organizado **cronológicamente por feature**, cada uno con su
 - Correo transaccional real vía **Brevo** (API HTTP, no SMTP — ver por qué
   en "Envío de Correos" más abajo), a un correo real, confirmado funcionando
 - Roles y permisos: consola de un panel (`security/group_console.html`)
-- Registro de usuarios: **solo el Administrador** puede crear cuentas,
-  con contraseña automática opcional + obligación de cambiarla al primer login
-- Exportación PDF/Excel: listados (`billing`, mixin genérico) y compras
-  individuales (`purchasing/exports.py`)
-
-**Pendiente / no empezado todavía** (visto en conversaciones pero sin código):
-- **Facturación Electrónica** (Ecuador, sin conexión real al SRI): agregar
-  `payment_status`/`payment_date`/`payment_method`/`numero_factura` a
-  `Invoice`, campos `cedula_ruc`/`direccion` a `Customer`, modelos nuevos
-  `ElectronicReceipt` y `PaymentLog`, vista "Marcar como Pagado", generar
-  PDF de factura (reutilizar el patrón de `purchasing/exports.py`) y
-  enviarlo por correo al pagar.
-- **PayPal** (bonus/puntos extra): se conectaría al flujo de "Marcar como
-  Pagado" de arriba.
-- Cargar datos de prueba reales (productos/clientes) — la base quedó vacía
-  tras la migración a Postgres.
-
-**Solo en local, todavía SIN subir a GitHub/Render** (a propósito, por
-instrucción del usuario — se subirá cuando haya más cambios):
-- **Rediseño visual completo**: se eliminó Bootstrap por completo y se
-  reemplazó por un **design system propio** (`billing/static/billing/app.css`
-  + `app.js`). Menú agrupado en desplegables (Compras / Ventas / Security),
-  notificaciones tipo *toast* animadas, y modales/dropdowns con JS vanilla
-  propio. Ver la sección "Rediseño: design system propio (sin Bootstrap)"
-  al final de este README.
+- Registro de usuarios: **solo el Administrador** puede crear cuentas, con
+  contraseña automática opcional + obligación de cambiarla al primer login,
+  y un buscador con sugerencias en vivo para vincular un Cliente existente
+- Exportación PDF/Excel: listados (mixin genérico) y documentos individuales
+  (factura, compra, comprobantes de pago de cuotas)
+- **Facturación electrónica**: simula el proceso real del SRI de Ecuador —
+  genera el **XML** del comprobante, lo firma, lo "envía" a recepción y
+  autorización (todo simulado, sin red) paso a paso, y produce un **RIDE**
+  (PDF con código de barras de la clave de acceso) descargable por el staff
+  y por el cliente desde su portal. App `facturacion_electronica`.
+- **Ventas y compras a crédito**: al registrar una factura o compra se elige
+  Contado o Crédito a N cuotas mensuales; registro de uno o varios pagos a
+  la vez, consulta de cuotas pendientes y comprobante de pago en PDF por
+  cada abono. App `creditos_ventas`.
+- **PayPal** (Sandbox, sin dinero real) conectado al flujo de cobro, tanto
+  en mostrador como desde el portal del cliente
+- Portal del cliente (`/portal/`): catálogo, carrito, checkout, sus propias
+  facturas (PDF/RIDE/XML) y pago con PayPal
+- **Login rediseñado**: panel dividido con imagen de fondo difuminada y
+  tinte de marca (ver "Login rediseñado..." más abajo)
 
 **Gotchas / cosas raras que le pasaron a este proyecto** (por si se repiten):
 - **Dos copias del proyecto en el disco**: `C:\Users\Davis\Documents\sales_a2`
@@ -1811,3 +1806,244 @@ bug de la app.
 
 Verificado: suite 64/64 (test nuevo del label enriquecido + JSON + buscador)
 y render de crear/editar bajo DEBUG=False.
+
+---
+
+# Login rediseñado (imagen de fondo) + buscador tipo autocompletar
+
+## Login: panel dividido con imagen de fondo difuminada
+
+**Antes:** login genérico (tarjeta centrada, sin imagen). El usuario pidió
+una plantilla de referencia con panel visual + formulario, e ilustración
+propia de Freepik (licencia gratuita con atribución).
+
+**Implementado** — [templates/registration/login.html](templates/registration/login.html)
++ estilos en [billing/static/billing/app.css](billing/static/billing/app.css)
+(sección `AUTH / LOGIN`): la página ya no usa el `app-shell` con sidebar (el
+login no tiene menú); es una tarjeta partida en dos — panel visual a la
+izquierda, formulario a la derecha. En pantallas chicas el panel visual
+desaparece y queda solo la tarjeta del formulario.
+
+La imagen es un **archivo estático** (`billing/static/billing/img/login-hero.jpg`,
+optimizada de 1.61 MB/7500px a 61 KB/1400px), no un `MEDIA` subido por el
+usuario — por eso persiste en Render sin depender de Cloudinary: `collectstatic`
+la empaqueta en cada build igual que el CSS.
+
+**Bug encontrado y corregido — el velo no se veía:** el diseño quería la foto
+cubierta por un degradado de marca (para que el texto siempre contraste). La
+primera versión usaba un pseudo-elemento `::before` para el velo, pero
+`::before` se pinta **como si fuera el primer hijo siempre**, sin importar en
+qué orden se escriba en el CSS — quedaba **debajo** de la `<img>` de fondo (un
+elemento real posicionado después en el HTML), así que la foto lo tapaba por
+completo y el texto blanco quedaba sin contraste sobre zonas claras de la
+imagen. Corrección: reemplazar el `::before` por un `<span class="auth-hero-veil">`
+real, colocado en el HTML **después** de la `<img>` — al ser ambos elementos
+posicionados con `z-index:auto`, pintan en orden de aparición en el árbol, así
+que el velo ahora sí queda encima de la foto.
+
+Iteración de diseño (pedido explícito del usuario, no un error): primero se
+hizo el velo con degradado azul oscuro y texto blanco; el usuario pidió que
+la foto se viera más clara — se cambió a un velo blanco semitransparente con
+texto oscuro (`var(--ink)`), manteniendo el mismo fix de capas.
+
+## Buscador de cliente: de filtro simple a sugerencias en vivo
+
+La sección anterior ("Alta de usuarios...", arriba) ya tenía un buscador que
+**filtraba las opciones del `<select>`** al escribir. Se actualizó a un
+**combobox con sugerencias tipo Google**: al escribir aparece un panel
+flotante bajo el campo con las coincidencias resaltadas, navegable con
+teclado (↑/↓/Enter/Escape), sin tocar el backend — el `<select>` original
+sigue existiendo oculto (`hidden`) como el valor real que envía el formulario;
+si el navegador no ejecuta JS, sigue funcionando como un `<select>` normal.
+
+Implementado íntegramente en el JS de
+[security/user_form.html](security/templates/security/user_form.html) (sin
+dependencias nuevas): ignora tildes/mayúsculas al comparar (`fold()`), y al
+elegir una sugerencia dispara el mismo `change` que ya usaba el autollenado
+de Nombre/Apellidos/Email, así que esa parte no cambió.
+
+---
+
+# Ventas y compras a crédito (`creditos_ventas`)
+
+**Objetivo:** el caso de estudio pedía una app `creditos_ventas` que, al
+registrar una factura, permitiera elegir Contado o Crédito (con cuotas
+mensuales autogeneradas), registrar pagos y consultar cuotas pendientes. El
+usuario extendió el alcance: el mismo mecanismo debía aplicar también a las
+**compras** — se implementó todo en una sola app (el enunciado pedía "un
+nuevo app", singular) en vez de duplicar la lógica en dos.
+
+## Modelos
+
+**Reutilizados, no duplicados** — se agregaron campos a los modelos que ya
+existían en vez de crear un `FacturaVenta` nuevo:
+- `billing.Invoice` y `purchasing.Purchase` ganan `tipo_pago`
+  (CONTADO/CREDITO), `saldo` y `estado` (PENDIENTE/PAGADA) — sin tocar
+  `payment_status`/`is_paid`/`PaymentLog`, que siguen sirviendo al flujo de
+  pago manual/PayPal ya existente.
+
+**Nuevos** — [creditos_ventas/models.py](creditos_ventas/models.py):
+`CuotaVenta`/`PagoCuotaVenta` (FK a `Invoice`) y su espejo
+`CuotaCompra`/`PagoCuotaCompra` (FK a `Purchase`). `PagoCuota*.cuota` usa
+`on_delete=PROTECT` — no se puede borrar una cuota con pagos registrados,
+regla de negocio que así queda garantizada a nivel de base de datos, sin
+necesitar una pantalla de "eliminar cuota".
+
+## Lógica (`creditos_ventas/services.py`)
+
+- **Generación de cuotas**: reparte el total entre N cuotas mensuales,
+  redondeando hacia abajo cada una y dejando que la **última absorba el
+  residuo**, así la suma siempre cuadra exacto con el total (sin depender de
+  `python-dateutil`, que no estaba instalado — las fechas mensuales se suman
+  con una función propia).
+- **Registro de pagos**: soporta pagar una o varias cuotas en un solo envío,
+  atómico (todo o nada). Valida que el monto sea > 0 y ≤ al saldo de la
+  cuota. Al llegar a saldo 0 en todas las cuotas, la factura/compra pasa a
+  `PAGADA` — y en el caso de ventas, también sincroniza `payment_status` (así
+  el botón "Cobrar con PayPal" deja de ofrecerse sobre una factura ya
+  liquidada por cuotas) y registra **un solo** `PaymentLog` de cierre.
+
+## Integración con las pantallas existentes
+
+`InvoiceForm`/`PurchaseForm` ganan los campos `tipo_pago`/`num_cuotas`
+(declarados, no de modelo — reutilizables entre ambos formularios vía
+[creditos_ventas/forms.py](creditos_ventas/forms.py)), con vista previa en
+vivo de las cuotas en el formulario. Si es Contado, la factura/compra queda
+pagada automáticamente al guardar. El detalle de factura/compra muestra el
+plan de crédito y enlaza a las pantallas nuevas: **cuotas pendientes**
+(listado con exportar, reutilizando `ExportListMixin` de `billing`), **plan
+de cuotas** de un documento + su historial de pagos, y **registrar pago**.
+Cada pago tiene su propio **comprobante de pago en PDF**
+([creditos_ventas/receipts.py](creditos_ventas/receipts.py)), descargable
+desde el historial.
+
+## Verificación
+
+98 tests (64 previos + 34 nuevos): matemática del reparto de cuotas
+(incluyendo totales no divisibles exacto), máquina de estados, todas las
+validaciones (cuotas < 1, pago ≤ 0, pago > saldo, fecha futura o anterior a
+la factura, no generar/pagar sobre un documento ya pagado), y permisos por
+rol. Más un smoke test manual de punta a punta (crear factura a crédito,
+pagar todas las cuotas, confirmar que pasa a PAGADA y desaparece "Cobrar con
+PayPal").
+
+---
+
+# Facturación electrónica: ciclo real del SRI simulado + RIDE (`facturacion_electronica`)
+
+**Objetivo:** la simulación anterior (sección "Facturación Electrónica
+(simulada, sin SRI)", arriba) solo generaba `numero_factura` y
+`clave_acceso` — no había XML ni ciclo de autorización. Se pidió simular el
+**proceso real del SRI de Ecuador**, mencionando específicamente el archivo
+XML. Esta app extiende (no reemplaza) esa base: sigue usando
+`billing.electronic` para los identificadores.
+
+## El proceso del SRI que se imita
+
+1. **XML del comprobante** (esquema *factura* v1.1.0): `infoTributaria`,
+   `infoFactura` (con IVA 15%, forma de pago según contado/crédito),
+   `detalles`, `infoAdicional` —
+   [facturacion_electronica/xml_builder.py](facturacion_electronica/xml_builder.py),
+   con `lxml` (ya estaba en requirements, no se agregó ninguna dependencia).
+2. **Firma electrónica** XAdES-BES — **simulada**: inserta un bloque
+   `<ds:Signature>` con la forma real (incluye un digest SHA-1 verdadero del
+   documento) pero sin certificado real. A propósito no se usa `xmlsec`
+   (librería nativa que podría romper el build de Render).
+3. **Recepción y autorización** — simuladas, sin red
+   ([facturacion_electronica/sri_simulado.py](facturacion_electronica/sri_simulado.py)):
+   el número de autorización es la propia clave de acceso (igual que en el
+   SRI real desde 2014).
+
+## Máquina de estados (elegido con el usuario: paso a paso, didáctico)
+
+`GENERADO → FIRMADO → RECIBIDO → AUTORIZADO`, un paso por clic en el botón
+**"Enviar al SRI"** del detalle de la factura — pensado para poder mostrar el
+proceso completo en clase, no solo el resultado final.
+[facturacion_electronica/services.py](facturacion_electronica/services.py)
+orquesta las transiciones y registra cada respuesta simulada en una bitácora
+(`ComprobanteElectronico.mensajes`). El **XML se guarda en Postgres**
+(`TextField`), no como archivo — así persiste en Render sin depender de
+`MEDIA`/Cloudinary.
+
+## RIDE rediseñado
+
+El PDF de la factura (que antes era un documento plano) ahora es el **RIDE**
+(Representación Impresa del Documento Electrónico):
+[facturacion_electronica/ride.py](facturacion_electronica/ride.py) — banda de
+cabecera con la marca, recuadro de autorización SRI con **código de barras
+Code128 de la clave de acceso**, condiciones de pago (contado/crédito, tipo
+de pago **y** estado/método de pago real — ver el fix de abajo), detalle,
+totales resaltados y el plan de cuotas si aplica.
+[billing/invoice_export.py](billing/invoice_export.py) quedó como un simple
+adaptador que delega aquí (import local, para evitar un ciclo de importación
+entre las dos apps) — así todos los lugares que ya generaban el PDF
+(descarga interna, portal del cliente, adjunto de correo) lo obtienen gratis,
+sin tocarlos.
+
+## Acceso: staff y cliente (elegido con el usuario)
+
+El cliente descarga su **XML autorizado** y su **RIDE** desde el portal
+(`billing/portal_views.py`, protegido por el mismo patrón `_own_invoice_or_404`
+que ya usa el resto del portal — 404 si intenta ver la factura de otro
+cliente). `shared/emails.py::send_invoice_email` adjunta también el XML
+cuando ya está autorizado.
+
+**Reenvío al autorizar:** el correo con la factura se enviaba solo al
+crearla (con el comprobante recién `GENERADO`, sin XML porque aún no estaba
+autorizado) y nunca se reenviaba al avanzar el ciclo — el cliente nunca
+recibía el XML final por correo. Se corrigió para que, justo cuando el
+comprobante llega a `AUTORIZADO`, se reenvíe la factura con el RIDE final y
+el XML adjuntos (mismo patrón que `_apply_payment` al confirmar un pago).
+Reintentar sobre un comprobante ya autorizado no duplica el envío.
+
+## Verificación
+
+120 tests (98 previos + 22 nuevos): estructura del XML y que su
+`importeTotal`/clave de acceso coincidan con la factura, la máquina de
+estados completa (sin poder saltar pasos), permisos, descargas (XML/RIDE),
+aislamiento del portal por cliente, y el reenvío de correo exactamente una
+vez al autorizar. Más una revisión visual real del RIDE generado (PDF leído
+y confirmado sin solapamientos de texto en la cabecera).
+
+---
+
+# Ajustes posteriores a créditos + facturación electrónica
+
+Tres bugs encontrados probando en Render después de desplegar las dos
+features de arriba, corregidos y verificados antes de subir cada uno.
+
+## Fix: decimales de más en el RIDE (`$3.0000` en vez de `$3.00`)
+
+**Causa:** `subtotal * Decimal('0.15')` produce un `Decimal` de **4
+decimales** (`20.00 * 0.15 = 3.0000`). La columna de la base sí lo guarda
+con 2, pero el **objeto en memoria** — el que usa el PDF adjunto al correo y
+la vista del carrito, antes de volver a leerse de la base — conservaba los 4.
+
+**Corrección en dos capas:**
+1. En origen: se redondea el IVA con `.quantize(Decimal('0.01'))` al
+   calcularlo en `invoice_create`, `purchase_create` y el checkout del
+   portal.
+2. Defensiva, en el RIDE: un helper `_money()` formatea **todo** importe a
+   2 decimales al imprimir, sin importar la precisión del `Decimal` de
+   entrada — así el PDF nunca muestra decimales de más pase lo que pase en
+   el resto del código.
+
+## Fix: error 500 al eliminar una factura/compra con plan de cuotas
+
+**Causa:** `CuotaVenta.factura`/`CuotaCompra.compra` usan
+`on_delete=PROTECT` a propósito (para no perder el historial de cuotas), pero
+`invoice_delete`/`purchase_delete` llamaban a `.delete()` sin capturar
+`ProtectedError` — borrar una venta o compra a crédito tiraba un 500 sin
+explicación (reproducido en producción al intentar borrar una factura real).
+
+**Corrección** — [billing/views.py](billing/views.py) y
+[purchasing/views.py](purchasing/views.py): se captura `ProtectedError` y se
+redirige al detalle con un mensaje claro ("tiene un plan de cuotas asociado,
+elimina primero sus cuotas o pagos") en vez de reventar.
+
+## Verificación
+
+123 tests (120 previos + 3 nuevos de los fixes de eliminar). Los tres bugs
+se **reprodujeron primero** con un script contra la base local (confirmando
+el traceback/síntoma exacto) antes de corregirlos, y se volvieron a probar
+después del fix para confirmar el comportamiento correcto.
