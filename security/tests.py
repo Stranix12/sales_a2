@@ -192,3 +192,43 @@ class RolesPantallasTests(TestCase):
         for url in ['/security/users/', '/security/roles/', '/security/users/create/']:
             r = c.get(url)
             self.assertEqual(r.status_code, 302, url)  # lo saca a la página principal
+
+
+# =====================================================================
+# Cambio obligatorio de contraseña temporal (primer login)
+# =====================================================================
+class ForcePasswordChangeTests(TestCase):
+    """El usuario recién creado entra con contraseña temporal y el sistema lo
+    obliga a cambiarla antes de usar el resto de la app."""
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user('primer_login', email='p@p.com', password='dyanezg')
+        UserSecurityProfile.objects.update_or_create(
+            user=self.user, defaults={'must_change_password': True})
+        self.client.force_login(self.user)
+
+    def test_middleware_redirige_a_cambiar_contrasena(self):
+        r = self.client.get('/')
+        self.assertEqual(r.status_code, 302)
+        self.assertIn('/security/force-password-change/', r.headers['Location'])
+
+    def test_pantalla_renderiza_con_el_diseno_nuevo(self):
+        r = self.client.get('/security/force-password-change/')
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        self.assertIn('Crea tu nueva contraseña', html)
+        self.assertIn('data-pw-toggle', html)  # botón mostrar/ocultar
+        self.assertIn('pwReqs', html)           # checklist de requisitos
+
+    def test_cambiar_contrasena_baja_la_bandera_y_libera_la_app(self):
+        r = self.client.post('/security/force-password-change/', {
+            'old_password': 'dyanezg',
+            'new_password1': 'ClaveNueva2026!',
+            'new_password2': 'ClaveNueva2026!',
+        }, follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('ClaveNueva2026!'))
+        self.assertFalse(UserSecurityProfile.objects.get(user=self.user).must_change_password)
+        # Ya puede navegar el resto de la app sin ser redirigido.
+        self.assertEqual(self.client.get('/').status_code, 200)
