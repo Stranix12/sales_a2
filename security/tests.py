@@ -187,6 +187,11 @@ class ClientSignupTests(TestCase):
         # queda logueado y aterriza en su portal, no en el dashboard interno
         self.assertEqual(r.redirect_chain[0][0], '/portal/')
         self.assertEqual(len(mail.outbox), 1)
+        # La contraseña la eligió el propio cliente: a diferencia de una
+        # cuenta creada por el Admin, no debe pedirle cambiarla al entrar.
+        self.assertFalse(UserSecurityProfile.objects.filter(user=user).exists())
+        r2 = self.client.get('/', follow=True)
+        self.assertEqual(r2.redirect_chain[0][0], '/portal/')  # no lo manda a cambiar contraseña
 
     def test_registro_con_cedula_invalida_es_rechazado(self):
         r = self._post({'dni': '0000000000'})
