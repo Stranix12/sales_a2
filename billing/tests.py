@@ -633,6 +633,35 @@ class InvoiceDeleteTests(TestCase):
         self.assertIn('plan de cuotas', r.content.decode().lower())
 
 
+class CustomerDeleteTests(TestCase):
+    """Un cliente con facturas asociadas tiene Invoice.customer con
+    on_delete=PROTECT (aunque estén pagadas: se conserva el historial de
+    ventas): borrarlo debe mostrar un mensaje claro, no un 500."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_cdel', 'a@a.com', 'pass12345')
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def test_eliminar_cliente_sin_facturas_funciona(self):
+        r = self.client.post(f'/customers/{self.customer.pk}/delete/', follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Customer.objects.filter(pk=self.customer.pk).exists())
+
+    def test_eliminar_cliente_con_factura_pagada_no_revienta_y_avisa(self):
+        invoice = Invoice.objects.create(customer=self.customer, subtotal=Decimal('20'),
+                                         tax=Decimal('3'), total=Decimal('23'),
+                                         payment_status='PAGADA')
+        r = self.client.post(f'/customers/{self.customer.pk}/delete/', follow=True)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(Customer.objects.filter(pk=self.customer.pk).exists())  # no se borró
+        self.assertTrue(Invoice.objects.filter(pk=invoice.pk).exists())
+        self.assertIn('facturas asociadas', r.content.decode().lower())
+
+
 class InvoiceEmailTests(TestCase):
     """Al crear una factura, el cliente debe recibir el correo con el detalle
     y el PDF (RIDE) adjunto; sin email registrado no se envía pero la

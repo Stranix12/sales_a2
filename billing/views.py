@@ -444,6 +444,20 @@ class CustomerDeleteView(PermissionRequiredMixin, DeleteView):
     permission_required = 'billing.delete_customer'
     model = Customer; template_name = 'billing/customer_confirm_delete.html'; success_url = reverse_lazy('billing:customer_list')
 
+    def form_valid(self, form):
+        try:
+            return super().form_valid(form)
+        except ProtectedError:
+            # El cliente tiene facturas asociadas (Invoice.customer es PROTECT,
+            # incluso si ya están pagadas: se conserva el historial de ventas).
+            messages.error(
+                self.request,
+                f'No se puede eliminar a {self.object}: tiene facturas asociadas '
+                '(pagadas o pendientes). Elimina primero sus facturas si de verdad '
+                'quieres borrarlo, o simplemente desactívalo desde "Editar".'
+            )
+            return redirect('billing:customer_list')
+
 # === INVOICE (lista CBV + create/detail/delete FBV con formset) ===
 class InvoiceListView(ExportListMixin, PermissionRequiredMixin, ListView):
     model = Invoice
