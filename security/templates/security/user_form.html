@@ -225,6 +225,12 @@
   // --- Autollenado: al elegir cliente se rellenan Nombre/Apellidos/Email ---
   // (editables después; la contraseña temporal y el correo de bienvenida
   // dependen de estos campos, por eso conviene que salgan del registro real)
+  // Las cuentas de Cliente inician sesión con su cédula, no con un usuario
+  // elegido a mano (ver ClientSignupForm/UserCreateForm.clean): al elegir el
+  // cliente, el campo Usuario se rellena con su cédula y se bloquea, para que
+  // lo que se ve en pantalla sea justo lo que el servidor va a guardar.
+  var usernameInput = document.getElementById('id_username');
+
   customerSelect.addEventListener('change', function () {
     var data = CUSTOMERS[this.value];
     if (!data) return;
@@ -234,6 +240,7 @@
     if (first) first.value = data.first_name;
     if (last) last.value = data.last_name;
     if (email) email.value = data.email;
+    if (usernameInput && data.dni) usernameInput.value = data.dni;
   });
 
   function syncCustomer() {
@@ -242,6 +249,13 @@
     var wrapper = customerSelect.closest('.field-wrap') || customerSelect.parentElement;
     wrapper.style.display = isCliente ? '' : 'none';
     if (!isCliente) customerSelect.value = '';
+    if (usernameInput) {
+      usernameInput.readOnly = isCliente;
+      if (isCliente) {
+        var data = CUSTOMERS[customerSelect.value];
+        usernameInput.value = data ? data.dni : '';
+      }
+    }
   }
   roleSelect.addEventListener('change', syncCustomer);
   syncCustomer();

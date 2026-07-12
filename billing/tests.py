@@ -481,8 +481,11 @@ class ClienteUserCreationTests(TestCase):
         self.assertIn('requiere elegir', r.content.decode())
 
     def test_rol_cliente_con_vinculo_crea_y_vincula(self):
+        # El rol Cliente inicia sesión con su cédula: el username escrito
+        # ('cli_nuevo') se ignora y el servidor lo reemplaza por la cédula
+        # del cliente vinculado (ver UserCreateForm.clean).
         self._post_user(customer=self.customer.pk)
-        user = User.objects.get(username='cli_nuevo')
+        user = User.objects.get(username=self.customer.dni)
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.user, user)
         self.assertTrue(user.groups.filter(name='Cliente').exists())

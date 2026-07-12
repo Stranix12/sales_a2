@@ -4,13 +4,14 @@ correo de bienvenida al inscribir usuarios, y roles (pantallas + acceso).
 Corre con: python manage.py test security
 """
 import re
+from decimal import Decimal
 
 from django.contrib.auth.models import Group, User
 from django.core import mail
 from django.core.management import call_command
 from django.test import Client, TestCase
 
-from billing.models import Customer
+from billing.models import Customer, Invoice
 from .models import UserSecurityProfile
 
 
@@ -131,12 +132,16 @@ class UserCreateWelcomeEmailTests(TestCase):
             dni='1710034065', first_name='Pedro', last_name='Yanez',
             email='pedro@example.com')
         self._post({
-            'username': 'cliente_portal', 'first_name': 'Pedro', 'last_name': 'Yanez',
+            # El username que se escriba se ignora para el rol Cliente: el
+            # servidor lo reemplaza por la cédula del cliente vinculado (ver
+            # UserCreateForm.clean), para que sea consistente con el login
+            # por cédula del autorregistro público.
+            'username': 'nombre-a-ignorar', 'first_name': 'Pedro', 'last_name': 'Yanez',
             'email': 'pedro@example.com',
             'role': Group.objects.get(name='Cliente').pk,
             'customer': customer.pk,
         })
-        user = User.objects.get(username='cliente_portal')
+        user = User.objects.get(username=customer.dni)
         customer.refresh_from_db()
         self.assertEqual(customer.user, user)  # cuenta vinculada a su cliente
         self.assertEqual(len(mail.outbox), 1)
@@ -147,6 +152,71 @@ class UserCreateWelcomeEmailTests(TestCase):
         self.assertFalse(User.objects.filter(username='nuevo_vendedor').exists())
         self.assertEqual(len(mail.outbox), 0)
         self.assertIn('requiere elegir', r.content.decode())
+
+
+# =====================================================================
+# Autorregistro público de clientes (/security/registro/)
+# =====================================================================
+class ClientSignupTests(TestCase):
+    """Solo los clientes se crean su propia cuenta aquí; inician sesión con
+    su cédula (no eligen un usuario) y quedan logueados de inmediato."""
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+
+    def setUp(self):
+        self.client = Client()
+
+    def _post(self, extra=None):
+        data = {
+            'dni': '1710034065', 'first_name': 'Pedro', 'last_name': 'Yanez',
+            'email': 'pedro@example.com', 'phone': '0999999999', 'address': '',
+            'password1': 'ClaveSegura2026!', 'password2': 'ClaveSegura2026!',
+        }
+        data.update(extra or {})
+        return self.client.post('/security/registro/', data, follow=True)
+
+    def test_registro_crea_cuenta_cliente_y_deja_logueado(self):
+        r = self._post()
+        self.assertEqual(r.status_code, 200)
+        user = User.objects.get(username='1710034065')  # cédula = usuario
+        self.assertTrue(user.check_password('ClaveSegura2026!'))
+        self.assertIn('Cliente', [g.name for g in user.groups.all()])
+        customer = Customer.objects.get(dni='1710034065')
+        self.assertEqual(customer.user, user)
+        # queda logueado y aterriza en su portal, no en el dashboard interno
+        self.assertEqual(r.redirect_chain[0][0], '/portal/')
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_registro_con_cedula_invalida_es_rechazado(self):
+        r = self._post({'dni': '0000000000'})
+        self.assertFalse(User.objects.filter(username='0000000000').exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_registro_vincula_a_cliente_ya_existente_sin_cuenta(self):
+        # El personal ya lo había registrado antes para facturarle (sin
+        # darle acceso al portal): el registro debe vincularse, no duplicar.
+        existente = Customer.objects.create(
+            dni='1710034065', first_name='Pedro', last_name='Yanez', email='viejo@example.com')
+        Invoice.objects.create(customer=existente, total=Decimal('10'))
+        self._post()
+        existente.refresh_from_db()
+        self.assertIsNotNone(existente.user)
+        self.assertEqual(Customer.objects.filter(dni='1710034065').count(), 1)  # no se duplicó
+        self.assertEqual(existente.invoices.count(), 1)  # su historial se conserva
+
+    def test_registro_con_cedula_ya_vinculada_es_rechazado(self):
+        self._post()  # primera cuenta (queda logueado)
+        self.client.logout()
+        r = self._post({'password1': 'OtraClave2026!', 'password2': 'OtraClave2026!'})
+        self.assertIn('Ya existe una cuenta', r.content.decode())
+        self.assertEqual(User.objects.filter(username='1710034065').count(), 1)  # no se duplicó
+
+    def test_usuario_autenticado_no_puede_entrar_al_registro(self):
+        admin = User.objects.create_superuser('admin_su', 'a@a.com', 'pass12345')
+        self.client.force_login(admin)
+        r = self.client.get('/security/registro/')
+        self.assertEqual(r.status_code, 302)
 
 
 # =====================================================================

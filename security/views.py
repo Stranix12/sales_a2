@@ -1,6 +1,7 @@
 import json
 
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User, Group, Permission
 from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
@@ -12,7 +13,7 @@ from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from shared.emails import send_welcome_email
 from shared.mixins import GroupRequiredMixin
-from .forms import UserCreateForm, UserUpdateForm, GroupForm, PermissionForm
+from .forms import ClientSignupForm, UserCreateForm, UserUpdateForm, GroupForm, PermissionForm
 from .models import UserSecurityProfile
 
 # === MIXIN BASE: SOLO ADMINISTRADOR ===
@@ -29,6 +30,33 @@ class SecurityLoginView(LoginView):
 class SecurityLogoutView(LogoutView):
     """Logout con CBV. Redirige según LOGOUT_REDIRECT_URL."""
     pass
+
+class ClientSignupView(CreateView):
+    """Registro público del portal: SOLO clientes se crean su propia cuenta
+    aquí (los roles internos —Administrador, Vendedor, Analista de Compras—
+    los sigue creando el Administrador desde /security/users/create/)."""
+    model = User
+    form_class = ClientSignupForm
+    template_name = 'security/client_signup.html'
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect('billing:home')
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # A diferencia de UserCreateView (el Administrador crea la cuenta de
+        # otro y no debe iniciar sesión como esa persona), aquí el propio
+        # cliente acaba de definir su contraseña: se le deja entrado.
+        auth_login(self.request, self.object, backend='django.contrib.auth.backends.ModelBackend')
+        login_url = self.request.build_absolute_uri(reverse('login'))
+        send_welcome_email(self.object, login_url=login_url)
+        messages.success(self.request, f'¡Bienvenido, {self.object.first_name}! Tu cuenta fue creada.')
+        return response
+
+    def get_success_url(self):
+        return reverse('billing:portal_catalog')
 
 class ForcePasswordChangeView(PasswordChangeView):
     """A donde ForcePasswordChangeMiddleware redirige a un usuario con
@@ -84,7 +112,7 @@ class UserCreateView(AdminOnlyMixin, CreateView):
         # Nombre/Apellidos/Email al elegir uno (rol Cliente).
         ctx['customers_json'] = json.dumps({
             str(c.pk): {'first_name': c.first_name, 'last_name': c.last_name,
-                        'email': c.email or ''}
+                        'email': c.email or '', 'dni': c.dni}
             for c in ctx['form'].fields['customer'].queryset
         })
         return ctx

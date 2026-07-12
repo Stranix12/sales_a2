@@ -8,8 +8,11 @@ urlpatterns = [
     path('login/', views.SecurityLoginView.as_view(), name='login'),
     path('logout/', views.SecurityLogoutView.as_view(), name='logout'),
     path('force-password-change/', views.ForcePasswordChangeView.as_view(), name='force_password_change'),
+    # Registro público: SOLO clientes (los roles internos los crea el Admin)
+    path('registro/', views.ClientSignupView.as_view(), name='client_signup'),
 
-    # Usuarios (solo Administrador: no hay registro público)
+    # Usuarios (Vendedor/Administrador/Analista de Compras: los crea el Admin;
+    # las cuentas Cliente también se autorregistran en /security/registro/)
     path('users/', views.UserListView.as_view(), name='user_list'),
     path('users/create/', views.UserCreateView.as_view(), name='user_create'),
     path('users/<int:pk>/edit/', views.UserUpdateView.as_view(), name='user_update'),

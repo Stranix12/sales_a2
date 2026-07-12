@@ -6,6 +6,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User, Group, Permission
 
 from billing.models import Customer
+from shared.validators import validate_cedula_ec
 
 
 def generate_temp_password(first_name, last_name):
@@ -100,6 +101,12 @@ class UserCreateForm(UserCreationForm):
             self.add_error('customer', 'El rol Cliente requiere elegir a qué cliente pertenece la cuenta.')
         if customer and (not role or role.name != 'Cliente'):
             self.add_error('customer', 'Solo las cuentas con rol Cliente se vinculan a un cliente.')
+        # Las cuentas de Cliente inician sesión con su cédula (igual que las
+        # que se autorregistran en el portal): el usuario que haya escrito el
+        # Administrador se ignora y se reemplaza por la cédula del cliente
+        # elegido, para que ambas vías de creación queden consistentes.
+        if role and role.name == 'Cliente' and customer:
+            cleaned_data['username'] = customer.dni
         return cleaned_data
 
     def _post_clean(self):
@@ -126,6 +133,72 @@ class UserCreateForm(UserCreationForm):
                 customer.user = user
                 customer.save(update_fields=['user'])
         return user
+
+
+# === 1b. AUTORREGISTRO DE CLIENTE (público, sin login) ===
+class ClientSignupForm(UserCreationForm):
+    """El propio cliente crea su cuenta del portal. A diferencia de
+    UserCreateForm (que usa el Administrador), aquí:
+      - El rol siempre es Cliente, no se elige.
+      - El usuario para iniciar sesión es su cédula/RUC, no un nombre elegido
+        (más fácil de recordar y evita duplicados, ver validate_cedula_ec).
+      - La contraseña la define el propio cliente (con la validación de
+        fortaleza normal de Django), no una temporal asignada por otro.
+      - Si ya existía un Customer con esa cédula (lo creó el personal para
+        facturarle, sin darle acceso al portal), la cuenta nueva se vincula a
+        ese registro en vez de duplicarlo, preservando su historial.
+    """
+    dni = forms.CharField(
+        max_length=13, label='Cédula/RUC', validators=[validate_cedula_ec],
+        help_text='Con esto inicias sesión (no se puede cambiar después).',
+    )
+    email = forms.EmailField(required=True, label='Email')
+    phone = forms.CharField(max_length=20, required=False, label='Teléfono (opcional)')
+    address = forms.CharField(
+        required=False, label='Dirección (opcional)', widget=forms.Textarea(attrs={'rows': 2}),
+    )
+
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in self.fields:
+            self.fields[f].widget.attrs['class'] = 'form-control'
+
+    def clean_dni(self):
+        dni = self.cleaned_data['dni']
+        existing = Customer.objects.filter(dni=dni).first()
+        if existing and existing.user_id:
+            raise forms.ValidationError(
+                'Ya existe una cuenta para esta cédula. Inicia sesión o usa '
+                '"¿Olvidaste tu contraseña?".'
+            )
+        if User.objects.filter(username=dni).exists():
+            raise forms.ValidationError('Ya existe una cuenta para esta cédula.')
+        return dni
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.username = self.cleaned_data['dni']
+        if commit:
+            user.save()
+            user.groups.add(Group.objects.get(name='Cliente'))
+            customer = Customer.objects.filter(dni=user.username).first()
+            if customer:
+                # Ya existía (facturación previa sin acceso al portal): se
+                # vincula tal cual, sin sobrescribir sus datos guardados.
+                customer.user = user
+                customer.save(update_fields=['user'])
+            else:
+                Customer.objects.create(
+                    dni=user.username, first_name=user.first_name, last_name=user.last_name,
+                    email=user.email, phone=self.cleaned_data.get('phone') or None,
+                    address=self.cleaned_data.get('address') or None, user=user,
+                )
+        return user
+
 
 # === 2. EDICIÓN DE USUARIO (asignar roles) ===
 class UserUpdateForm(forms.ModelForm):
