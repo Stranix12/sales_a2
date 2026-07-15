@@ -852,6 +852,29 @@ class ExportImageTests(TestCase):
                 p.image.delete(save=False)
             Product.objects.filter(pk__in=[p.pk for p in extra]).delete()
 
+    def test_imagen_grande_se_reduce_a_miniatura_antes_de_guardarse(self):
+        # Bug real (OOM en Render): una foto de celular sin reducir (p. ej.
+        # 3000x4000) ocupa ~34 MB descomprimida; con varios productos con
+        # foto eso agotaba la RAM del plan free y el worker moría con
+        # SIGKILL. _image_png debe reducirla a miniatura ANTES de guardarla.
+        import io
+        from PIL import Image as PILImage
+        from django.core.files.base import ContentFile
+        from .mixins import ExportListMixin
+
+        foto = PILImage.new('RGB', (3000, 4000), (10, 120, 200))
+        buf_in = io.BytesIO()
+        foto.save(buf_in, format='JPEG', quality=85)
+        self.product.image.save('grande.jpg', ContentFile(buf_in.getvalue()), save=True)
+        try:
+            resultado = ExportListMixin()._image_png(self.product, {'field': 'image', 'key': 'image'})
+            self.assertIsNotNone(resultado)
+            miniatura = PILImage.open(resultado)
+            self.assertLessEqual(max(miniatura.size), ExportListMixin._EXPORT_IMG_MAX)
+            self.assertLess(resultado.getbuffer().nbytes, 100 * 1024)  # miniatura: KB, no MB
+        finally:
+            self.product.image.delete(save=True)
+
 
 class ActionButtonPermissionTests(TestCase):
     """Los botones de acción (crear/editar/eliminar) se ocultan si el rol no

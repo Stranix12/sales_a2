@@ -131,16 +131,32 @@ class ExportListMixin:
             value = getattr(value, part, None)
         return value or None  # FieldFile vacío es falsy
 
+    # En la tabla la imagen se ve a ~46px: no hace falta más resolución que
+    # esta para que se vea nítida, y así el thumbnail() de abajo la reduce
+    # de entrada (ver por qué en _image_png).
+    _EXPORT_IMG_MAX = 160
+
     def _image_png(self, obj, coldef, cache=None):
-        """Imagen normalizada a PNG en memoria (BytesIO), o None.
+        """Imagen reducida a miniatura y normalizada a PNG en memoria
+        (BytesIO), o None.
 
         Se lee vía la API del storage (``file.open()/read()``), NO por
         ``file.path``: en producción el storage es Cloudinary (remoto), donde
         ``.path`` lanza ``NotImplementedError`` y tumbaba la exportación (PDF y
-        Excel) con un 500. Además se reconvierte a RGB con Pillow, lo que fuerza
-        a decodificarla aquí (dentro del try) y descarta el canal alfa/formatos
-        raros que, con la carga diferida de reportlab, reventaban el PDF entero
-        fuera de cualquier try/except. Cualquier fallo -> None (celda '—').
+        Excel) con un 500.
+
+        Se reduce con ``thumbnail()`` ANTES de guardar: una foto de celular
+        normal (p. ej. 3000×4000) descomprimida ocupa ~36 MB en memoria; en la
+        tabla se muestra a ~46px, así que guardar la resolución completa era
+        pura memoria desperdiciada. Con varios productos con foto eso agotaba
+        la RAM del plan free de Render (512 MB) y el worker de gunicorn moría
+        con SIGKILL (OOM). Reducido a miniatura, cada imagen pesa unos pocos
+        KB en vez de decenas de MB.
+
+        También se reconvierte a RGB con Pillow, lo que fuerza a decodificarla
+        aquí (dentro del try) y descarta el canal alfa/formatos raros que, con
+        la carga diferida de reportlab, reventaban el PDF entero fuera de
+        cualquier try/except. Cualquier fallo -> None (celda '—').
 
         Si se pasa ``cache`` (ver ``_prefetch_images``), se usa ese resultado
         ya descargado en vez de volver a pedirlo al storage."""
@@ -156,7 +172,11 @@ class ExportListMixin:
                 raw = f.read()  # bytes completos: sirve para disco y remoto
             finally:
                 f.close()
-            im = PILImage.open(BytesIO(raw)).convert('RGB')  # BytesIO -> seekable
+            im = PILImage.open(BytesIO(raw))
+            # thumbnail() ANTES de convert(): para JPEG, Pillow puede decodificar
+            # ya reducido (modo "draft"), evitando cargar el bitmap completo.
+            im.thumbnail((self._EXPORT_IMG_MAX, self._EXPORT_IMG_MAX))
+            im = im.convert('RGB')  # BytesIO -> seekable
             buf = BytesIO()
             im.save(buf, format='PNG')
             buf.seek(0)
@@ -174,6 +194,10 @@ class ExportListMixin:
         superar el timeout del worker de gunicorn (30s) y la descarga se queda
         "colgada" hasta que la conexión se corta a medias. Con un pool acotado
         de hilos el tiempo total baja de N·latencia a ~(N/paralelismo)·latencia.
+        El pool se mantiene pequeño (4) a propósito: el plan free de Render
+        tiene muy poca RAM/CPU, y cada imagen decodificada en paralelo consume
+        memoria mientras se procesa (aunque ya reducida a miniatura en
+        _image_png); no conviene multiplicar eso por demasiados hilos a la vez.
         Devuelve {(obj.pk, col_key): BytesIO|None}."""
         image_cols = [c for c in columns if c.get('type') == 'image']
         if not image_cols:
@@ -182,7 +206,7 @@ class ExportListMixin:
         if not tasks:
             return {}
         cache = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
             futures = {
                 pool.submit(self._image_png, obj, coldef): (obj.pk, coldef['key'])
                 for obj, coldef in tasks
