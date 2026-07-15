@@ -1,5 +1,4 @@
 """Mixins reutilizables para las vistas de la app billing."""
-import os
 from datetime import datetime, date
 from decimal import Decimal
 from io import BytesIO
@@ -131,6 +130,34 @@ class ExportListMixin:
             value = getattr(value, part, None)
         return value or None  # FieldFile vacío es falsy
 
+    def _image_png(self, obj, coldef):
+        """Imagen normalizada a PNG en memoria (BytesIO), o None.
+
+        Se lee vía la API del storage (``file.open()/read()``), NO por
+        ``file.path``: en producción el storage es Cloudinary (remoto), donde
+        ``.path`` lanza ``NotImplementedError`` y tumbaba la exportación (PDF y
+        Excel) con un 500. Además se reconvierte a RGB con Pillow, lo que fuerza
+        a decodificarla aquí (dentro del try) y descarta el canal alfa/formatos
+        raros que, con la carga diferida de reportlab, reventaban el PDF entero
+        fuera de cualquier try/except. Cualquier fallo -> None (celda '—')."""
+        f = self._get_field_file(obj, coldef['field'])
+        if not f:
+            return None
+        try:
+            from PIL import Image as PILImage
+            f.open('rb')
+            try:
+                raw = f.read()  # bytes completos: sirve para disco y remoto
+            finally:
+                f.close()
+            im = PILImage.open(BytesIO(raw)).convert('RGB')  # BytesIO -> seekable
+            buf = BytesIO()
+            im.save(buf, format='PNG')
+            buf.seek(0)
+            return buf
+        except Exception:
+            return None
+
     # ---------------------------------------------------------------- dispatch
     def get(self, request, *args, **kwargs):
         export = request.GET.get('export')
@@ -169,11 +196,10 @@ class ExportListMixin:
         return str(val)
 
     def _excel_image(self, ws, row, col_idx, obj, coldef):
-        f = self._get_field_file(obj, coldef['field'])
-        path = getattr(f, 'path', None) if f else None
-        if path and os.path.exists(path):
+        buf = self._image_png(obj, coldef)
+        if buf:
             try:
-                img = XLImage(path)
+                img = XLImage(buf)
                 img.width = img.height = 46
                 ws.add_image(img, ws.cell(row=row, column=col_idx).coordinate)
                 return True
@@ -240,11 +266,10 @@ class ExportListMixin:
 
     def _pdf_cell(self, obj, coldef, body_style, img_size):
         if coldef.get('type') == 'image':
-            f = self._get_field_file(obj, coldef['field'])
-            path = getattr(f, 'path', None) if f else None
-            if path and os.path.exists(path):
+            buf = self._image_png(obj, coldef)
+            if buf:
                 try:
-                    return RLImage(path, width=img_size, height=img_size)
+                    return RLImage(buf, width=img_size, height=img_size)
                 except Exception:
                     pass
             return Paragraph('—', body_style)

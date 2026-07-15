@@ -753,3 +753,97 @@ class AsyncInvoiceEmailTests(TestCase):
         self.assertLess(elapsed, 0.2)                 # retornó sin esperar el envío
         self.assertTrue(done.wait(timeout=3))         # el envío sí ocurrió, en background
         self.assertNotEqual(hilos['worker'], threading.main_thread().name)
+
+
+class ExportImageTests(TestCase):
+    """Exportar un listado con imágenes no debe reventar (bug: en producción
+    el storage es Cloudinary/remoto, donde file.path lanza NotImplementedError;
+    y una imagen corrupta rompía el PDF por la carga diferida de reportlab)."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        cls.admin = User.objects.create_superuser('admin_exp', 'a@a.com', 'pass12345')
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    @staticmethod
+    def _png():
+        import io
+        from PIL import Image as PILImage
+        buf = io.BytesIO()
+        PILImage.new('RGBA', (8, 8), (0, 128, 255, 120)).save(buf, format='PNG')  # con alfa
+        return buf.getvalue()
+
+    def test_export_con_imagen_valida_ok(self):
+        from django.core.files.base import ContentFile
+        self.product.image.save('ok.png', ContentFile(self._png()), save=True)
+        try:
+            for kind in ('pdf', 'excel'):
+                r = self.client.get(f'/products/?export={kind}')
+                self.assertEqual(r.status_code, 200, kind)
+                self.assertGreater(len(r.content), 500, kind)
+        finally:
+            self.product.image.delete(save=True)
+
+    def test_export_con_imagen_corrupta_no_revienta(self):
+        from django.core.files.base import ContentFile
+        self.product.image.save('bad.png', ContentFile(b'no soy una imagen'), save=True)
+        try:
+            for kind in ('pdf', 'excel'):
+                r = self.client.get(f'/products/?export={kind}')
+                self.assertEqual(r.status_code, 200, kind)  # degradado a '—', sin 500
+        finally:
+            self.product.image.delete(save=True)
+
+    def test_export_storage_sin_path_no_revienta(self):
+        # Simula Cloudinary: acceder a .path lanza NotImplementedError.
+        from django.core.files.base import ContentFile
+        from django.core.files.storage import FileSystemStorage
+        self.product.image.save('remote.png', ContentFile(self._png()), save=True)
+
+        def boom(self, name):
+            raise NotImplementedError('storage remoto, sin path local')
+        try:
+            with patch.object(FileSystemStorage, 'path', boom):
+                for kind in ('pdf', 'excel'):
+                    r = self.client.get(f'/products/?export={kind}')
+                    self.assertEqual(r.status_code, 200, kind)
+        finally:
+            self.product.image.delete(save=True)
+
+
+class ActionButtonPermissionTests(TestCase):
+    """Los botones de acción (crear/editar/eliminar) se ocultan si el rol no
+    tiene el permiso: antes aparecían y al hacer clic daba error de permiso."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+
+    def _user_con_permisos(self, *codenames):
+        from django.contrib.auth.models import Permission
+        u = User.objects.create_user('perm_probe', password='x')
+        for cn in codenames:
+            u.user_permissions.add(Permission.objects.get(codename=cn))
+        return User.objects.get(pk=u.pk)  # recarga la caché de permisos
+
+    def test_sin_add_no_ve_boton_crear(self):
+        c = Client(); c.force_login(self._user_con_permisos('view_invoice'))
+        html = c.get('/invoices/').content.decode()
+        self.assertNotIn('/invoices/create/', html)
+
+    def test_con_add_ve_boton_crear(self):
+        c = Client(); c.force_login(self._user_con_permisos('view_invoice', 'add_invoice'))
+        html = c.get('/invoices/').content.decode()
+        self.assertIn('/invoices/create/', html)
+
+    def test_sin_change_no_ve_boton_editar_producto(self):
+        c = Client(); c.force_login(self._user_con_permisos('view_product'))
+        html = c.get('/products/').content.decode()
+        self.assertNotIn(f'/products/{self.product.pk}/edit/', html)
+
+    def test_con_change_ve_boton_editar_producto(self):
+        c = Client(); c.force_login(self._user_con_permisos('view_product', 'change_product'))
+        html = c.get('/products/').content.decode()
+        self.assertIn(f'/products/{self.product.pk}/edit/', html)

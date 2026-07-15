@@ -42,7 +42,9 @@
   </div>
   <div class="card-footer bg-white border-top d-flex flex-wrap gap-2 justify-content-end py-3 px-4">
     <a href="{% url 'billing:productgroup_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Volver al listado</a>
+    {% if perms.billing.change_productgroup %}
     <a href="{% url 'billing:productgroup_update' group.pk %}" class="btn btn-warning"><i class="bi bi-pencil-square me-1"></i>Editar</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

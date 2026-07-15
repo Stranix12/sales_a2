@@ -104,9 +104,11 @@
     <a href="{% url 'purchasing:purchase_export_excel' purchase.pk %}" class="btn btn-outline-success">
       <i class="bi bi-file-earmark-excel me-1"></i>Excel
     </a>
+    {% if perms.purchasing.delete_purchase %}
     <a href="{% url 'purchasing:purchase_delete' purchase.pk %}" class="btn btn-danger">
       <i class="bi bi-trash me-1"></i>Delete
     </a>
+    {% endif %}
   </div>
 </div>
 

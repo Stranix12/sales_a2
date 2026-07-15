@@ -12,7 +12,9 @@
       <span class="badge bg-secondary ms-1">{{ visible_count }}/{{ total_columns }}</span>
     </button>
     {% include 'billing/_export_buttons.html' %}
+    {% if perms.billing.add_invoice %}
     <a href="{% url 'billing:invoice_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Nueva factura</a>
+    {% endif %}
   </div>
 </div>
 
@@ -81,7 +83,9 @@
           <td class="row-actions">
             <a href="{% url 'billing:invoice_detail' item.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
             <a href="{% url 'billing:invoice_pdf' item.pk %}" class="act-btn act-edit" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+            {% if perms.billing.delete_invoice %}
             <a href="{% url 'billing:invoice_delete' item.pk %}" class="act-btn act-del" title="Eliminar"><i class="bi bi-trash"></i></a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

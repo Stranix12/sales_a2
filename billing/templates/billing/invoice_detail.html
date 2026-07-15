@@ -210,7 +210,9 @@
     {% endif %}
     {% endif %}
     {% endif %}
+    {% if perms.billing.delete_invoice %}
     <a href="{% url 'billing:invoice_delete' invoice.pk %}" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Eliminar</a>
+    {% endif %}
   </div>
 </div>
 

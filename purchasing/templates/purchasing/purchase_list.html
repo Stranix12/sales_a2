@@ -10,9 +10,11 @@
     <a href="{% url 'purchasing:purchase_report' %}" class="btn btn-outline-dark">
       <i class="bi bi-bar-chart"></i>Reporte de costo prom.
     </a>
+    {% if perms.purchasing.add_purchase %}
     <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-primary">
       <i class="bi bi-plus-lg"></i>Nueva compra
     </a>
+    {% endif %}
   </div>
 </div>
 
@@ -71,7 +73,9 @@
             <a href="{% url 'purchasing:purchase_detail' purchase.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
             <a href="{% url 'purchasing:purchase_export_pdf' purchase.pk %}" class="act-btn act-edit" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i></a>
             <a href="{% url 'purchasing:purchase_export_excel' purchase.pk %}" class="act-btn act-edit" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i></a>
+            {% if perms.purchasing.delete_purchase %}
             <a href="{% url 'purchasing:purchase_delete' purchase.pk %}" class="act-btn act-del" title="Eliminar"><i class="bi bi-trash"></i></a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

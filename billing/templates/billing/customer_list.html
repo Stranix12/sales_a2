@@ -12,7 +12,9 @@
       <span class="badge bg-secondary ms-1">{{ visible_count }}/{{ total_columns }}</span>
     </button>
     {% include 'billing/_export_buttons.html' %}
+    {% if perms.billing.add_customer %}
     <a href="{% url 'billing:customer_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Nuevo cliente</a>
+    {% endif %}
   </div>
 </div>
 
@@ -87,8 +89,12 @@
           {% endfor %}
           <td class="row-actions">
             <a href="{% url 'billing:customer_detail' item.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
+            {% if perms.billing.change_customer %}
             <a href="{% url 'billing:customer_update' item.pk %}" class="act-btn act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
+            {% endif %}
+            {% if perms.billing.delete_customer %}
             <a href="{% url 'billing:customer_delete' item.pk %}" class="act-btn act-del" title="Eliminar"><i class="bi bi-trash"></i></a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

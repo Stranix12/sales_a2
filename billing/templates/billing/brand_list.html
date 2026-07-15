@@ -12,7 +12,9 @@
       <span class="badge bg-secondary ms-1">{{ visible_count }}/{{ total_columns }}</span>
     </button>
     {% include 'billing/_export_buttons.html' %}
+    {% if perms.billing.add_brand %}
     <a href="{% url 'billing:brand_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Nueva marca</a>
+    {% endif %}
   </div>
 </div>
 
@@ -65,8 +67,12 @@
           {% endfor %}
           <td class="row-actions">
             <a href="{% url 'billing:brand_detail' item.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
+            {% if perms.billing.change_brand %}
             <a href="{% url 'billing:brand_update' item.pk %}" class="act-btn act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
+            {% endif %}
+            {% if perms.billing.delete_brand %}
             <a href="{% url 'billing:brand_delete' item.pk %}" class="act-btn act-del" title="Eliminar"><i class="bi bi-trash"></i></a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}
