@@ -813,6 +813,45 @@ class ExportImageTests(TestCase):
         finally:
             self.product.image.delete(save=True)
 
+    def test_varias_imagenes_se_descargan_en_paralelo_no_en_serie(self):
+        # Bug real: en Render (storage Cloudinary, remoto) cada imagen es una
+        # petición HTTP; en serie, varios productos con foto podían superar
+        # el timeout del worker de gunicorn y la descarga se quedaba colgada
+        # hasta cortarse. _prefetch_images las trae con un pool de hilos.
+        import io
+        import time
+        from unittest.mock import patch as mock_patch
+        from django.core.files.base import ContentFile
+        from django.db.models.fields.files import FieldFile
+        from .models import Product
+
+        extra = []
+        for i in range(6):
+            p = Product.objects.create(
+                name=f'ProdParalelo{i}', brand=self.brand, group=self.group,
+                unit_price=10, stock=5, is_active=True,
+            )
+            p.image.save(f'par{i}.png', ContentFile(self._png()), save=True)
+            extra.append(p)
+
+        orig_open = FieldFile.open
+        def slow_open(self, mode='rb'):
+            time.sleep(0.3)
+            return orig_open(self, mode)
+
+        try:
+            with mock_patch.object(FieldFile, 'open', slow_open):
+                t0 = time.perf_counter()
+                r = self.client.get('/products/?export=pdf')
+                elapsed = time.perf_counter() - t0
+            self.assertEqual(r.status_code, 200)
+            # En serie 6 imágenes de 0.3s tomarían ~1.8s; en paralelo, ~0.3-0.6s.
+            self.assertLess(elapsed, 1.2)
+        finally:
+            for p in extra:
+                p.image.delete(save=False)
+            Product.objects.filter(pk__in=[p.pk for p in extra]).delete()
+
 
 class ActionButtonPermissionTests(TestCase):
     """Los botones de acción (crear/editar/eliminar) se ocultan si el rol no
@@ -847,3 +886,23 @@ class ActionButtonPermissionTests(TestCase):
         c = Client(); c.force_login(self._user_con_permisos('view_product', 'change_product'))
         html = c.get('/products/').content.decode()
         self.assertIn(f'/products/{self.product.pk}/edit/', html)
+
+
+class Friendly403Tests(TestCase):
+    """Si a un rol le quitan un permiso (ej. 'ver'), el usuario ya no debe
+    toparse con el 403 Forbidden en blanco de Django, sino con una página
+    integrada a la app que explica por qué y qué rol tiene."""
+    def test_usuario_sin_permiso_ve_pagina_amigable_no_el_403_plano(self):
+        u = User.objects.create_user('sin_permiso_403', password='x')
+        g = Group.objects.create(name='RolSinPermisos403')  # sin permisos
+        u.groups.add(g)
+
+        c = Client(); c.force_login(u)
+        r = c.get('/invoices/')  # requiere billing.view_invoice
+        html = r.content.decode()
+
+        self.assertEqual(r.status_code, 403)
+        self.assertNotIn('<h1>403 Forbidden</h1>', html)  # ya no es el texto plano
+        self.assertIn('No tienes permiso para esto', html)
+        self.assertIn('RolSinPermisos403', html)           # explica con qué rol
+        self.assertIn('app-sidebar', html)                 # sigue siendo parte de la app

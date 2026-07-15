@@ -1,0 +1,52 @@
+{% extends 'billing/base.html' %}
+{% block title %}Acceso restringido{% endblock %}
+{% block content %}
+<style>
+  .fb-wrap { max-width: 480px; margin: 40px auto 0; text-align: center; }
+  .fb-ico {
+    width: 64px; height: 64px; border-radius: 18px; margin: 0 auto 18px;
+    display: flex; align-items: center; justify-content: center; font-size: 1.9rem;
+    background: #fbeecb; color: #8a5b00;
+  }
+  .fb-wrap h3 { font-weight: 700; margin: 0 0 8px; }
+  .fb-wrap p { color: #6b7280; margin: 0 0 4px; }
+  .fb-role {
+    display: inline-flex; align-items: center; gap: 6px; margin: 14px 0 22px;
+    padding: .4rem .9rem; border-radius: 999px; background: #f6f7fb;
+    border: 1px solid #e3e6ef; color: #59617a; font-size: .85rem; font-weight: 600;
+  }
+  .fb-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+</style>
+
+<div class="fb-wrap">
+  <div class="fb-ico"><i class="bi bi-shield-lock"></i></div>
+
+  {% if user.is_authenticated %}
+    <h3>No tienes permiso para esto</h3>
+    <p>Tu cuenta no cuenta con el permiso necesario para acceder a esta sección
+      {% if not user.is_superuser %}(o te lo acaban de quitar){% endif %}.</p>
+
+    {% if user.groups.all %}
+    <div class="fb-role">
+      <i class="bi bi-person-badge"></i>
+      Rol{{ user.groups.all|length|pluralize:",es" }}:
+      {% for g in user.groups.all %}{{ g.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% else %}
+    <div class="fb-role"><i class="bi bi-person-badge"></i>Sin rol asignado</div>
+    {% endif %}
+
+    <p style="font-size:.85rem">Si crees que deberías tener acceso, pide a un Administrador que revise los permisos de tu rol.</p>
+
+    <div class="fb-actions">
+      <a href="{% url 'billing:home' %}" class="btn btn-primary"><i class="bi bi-house-door me-1"></i>Volver al inicio</a>
+    </div>
+  {% else %}
+    <h3>Necesitas iniciar sesión</h3>
+    <p>Esta sección requiere una cuenta con acceso.</p>
+    <div class="fb-actions">
+      <a href="{% url 'login' %}" class="btn btn-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

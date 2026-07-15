@@ -1,4 +1,5 @@
 """Mixins reutilizables para las vistas de la app billing."""
+import concurrent.futures
 from datetime import datetime, date
 from decimal import Decimal
 from io import BytesIO
@@ -130,7 +131,7 @@ class ExportListMixin:
             value = getattr(value, part, None)
         return value or None  # FieldFile vacío es falsy
 
-    def _image_png(self, obj, coldef):
+    def _image_png(self, obj, coldef, cache=None):
         """Imagen normalizada a PNG en memoria (BytesIO), o None.
 
         Se lee vía la API del storage (``file.open()/read()``), NO por
@@ -139,7 +140,12 @@ class ExportListMixin:
         Excel) con un 500. Además se reconvierte a RGB con Pillow, lo que fuerza
         a decodificarla aquí (dentro del try) y descarta el canal alfa/formatos
         raros que, con la carga diferida de reportlab, reventaban el PDF entero
-        fuera de cualquier try/except. Cualquier fallo -> None (celda '—')."""
+        fuera de cualquier try/except. Cualquier fallo -> None (celda '—').
+
+        Si se pasa ``cache`` (ver ``_prefetch_images``), se usa ese resultado
+        ya descargado en vez de volver a pedirlo al storage."""
+        if cache is not None:
+            return cache.get((obj.pk, coldef['key']))
         f = self._get_field_file(obj, coldef['field'])
         if not f:
             return None
@@ -157,6 +163,33 @@ class ExportListMixin:
             return buf
         except Exception:
             return None
+
+    def _prefetch_images(self, objects, columns):
+        """Descarga y normaliza TODAS las imágenes de la exportación en
+        paralelo (una sola vez), en vez de una por una y en serie dentro del
+        loop de filas.
+
+        En producción el storage es Cloudinary (remoto): leer cada imagen
+        dispara una petición HTTP. Hacerlo en serie para 15-20 productos puede
+        superar el timeout del worker de gunicorn (30s) y la descarga se queda
+        "colgada" hasta que la conexión se corta a medias. Con un pool acotado
+        de hilos el tiempo total baja de N·latencia a ~(N/paralelismo)·latencia.
+        Devuelve {(obj.pk, col_key): BytesIO|None}."""
+        image_cols = [c for c in columns if c.get('type') == 'image']
+        if not image_cols:
+            return {}
+        tasks = [(obj, coldef) for obj in objects for coldef in image_cols]
+        if not tasks:
+            return {}
+        cache = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                pool.submit(self._image_png, obj, coldef): (obj.pk, coldef['key'])
+                for obj, coldef in tasks
+            }
+            for future in concurrent.futures.as_completed(futures):
+                cache[futures[future]] = future.result()
+        return cache
 
     # ---------------------------------------------------------------- dispatch
     def get(self, request, *args, **kwargs):
@@ -195,8 +228,8 @@ class ExportListMixin:
             return val
         return str(val)
 
-    def _excel_image(self, ws, row, col_idx, obj, coldef):
-        buf = self._image_png(obj, coldef)
+    def _excel_image(self, ws, row, col_idx, obj, coldef, cache=None):
+        buf = self._image_png(obj, coldef, cache=cache)
         if buf:
             try:
                 img = XLImage(buf)
@@ -211,6 +244,7 @@ class ExportListMixin:
     def export_excel(self):
         columns = self.get_visible_columns()
         objects = list(self.get_queryset())
+        image_cache = self._prefetch_images(objects, columns)
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -231,7 +265,7 @@ class ExportListMixin:
             has_image = False
             for idx, coldef in enumerate(columns, start=1):
                 if coldef.get('type') == 'image':
-                    if self._excel_image(ws, r, idx, obj, coldef):
+                    if self._excel_image(ws, r, idx, obj, coldef, image_cache):
                         has_image = True
                     widths[idx - 1] = max(widths[idx - 1], 10)
                 else:
@@ -264,9 +298,9 @@ class ExportListMixin:
             return val.strftime('%d/%m/%Y')
         return '' if val is None else str(val)
 
-    def _pdf_cell(self, obj, coldef, body_style, img_size):
+    def _pdf_cell(self, obj, coldef, body_style, img_size, image_cache=None):
         if coldef.get('type') == 'image':
-            buf = self._image_png(obj, coldef)
+            buf = self._image_png(obj, coldef, cache=image_cache)
             if buf:
                 try:
                     return RLImage(buf, width=img_size, height=img_size)
@@ -278,6 +312,7 @@ class ExportListMixin:
     def export_pdf(self):
         columns = self.get_visible_columns()
         objects = list(self.get_queryset())
+        image_cache = self._prefetch_images(objects, columns)
         n = len(columns)
 
         # Adaptación automática según el nº de columnas.
@@ -317,7 +352,7 @@ class ExportListMixin:
 
             data = [[Paragraph(str(c['label']), head_style) for c in columns]]
             for obj in objects:
-                data.append([self._pdf_cell(obj, c, body_style, img_size) for c in columns])
+                data.append([self._pdf_cell(obj, c, body_style, img_size, image_cache) for c in columns])
 
             table = Table(data, colWidths=col_widths, repeatRows=1)
             table.hAlign = 'CENTER'  # centra la tabla (útil con pocas columnas)

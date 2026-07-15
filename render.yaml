@@ -18,7 +18,11 @@ services:
     # creditos_ventas a creditos_compras quedan content types (y permisos)
     # huérfanos de la app anterior; este paso los limpia antes de setup_roles.
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py remove_stale_contenttypes --noinput && python manage.py setup_roles && (python manage.py createsuperuser --noinput || true)"
-    startCommand: "gunicorn config.wsgi:application"
+    # --timeout 60 (el default de gunicorn es 30s): exportar PDF/Excel con
+    # imágenes en Cloudinary (storage remoto) puede tardar más que eso si hay
+    # varios productos con foto; sin este margen el worker se mataba a medias
+    # y la descarga se quedaba colgada hasta cortarse la conexión.
+    startCommand: "gunicorn config.wsgi:application --timeout 60"
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.0"
