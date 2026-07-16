@@ -42,7 +42,15 @@
         <table class="table table-bordered align-middle">
           <thead class="table-secondary">
             <tr>
-              <th class="text-center" style="width:70px;">Pagar</th>
+              <th style="width:110px;">
+                <label class="d-inline-flex align-items-center gap-2 mb-0" for="pagarTodasCheckbox"
+                       style="cursor:pointer;" title="Marca todas las cuotas pendientes">
+                  <span class="form-check d-inline-block mb-0">
+                    <input type="checkbox" class="form-check-input" id="pagarTodasCheckbox">
+                  </span>
+                  Todas
+                </label>
+              </th>
               <th class="text-center">Cuota</th>
               <th>Vencimiento</th>
               <th class="text-end">Saldo</th>
@@ -51,9 +59,11 @@
           </thead>
           <tbody>
             {% for cuota, row in filas %}
-            <tr>
+            <tr data-saldo="{{ cuota.saldo|stringformat:'.2f' }}">
               <td class="text-center">
-                {{ row.pagar }}
+                <div class="form-check d-inline-block mb-0">
+                  {{ row.pagar }}
+                </div>
                 {{ row.cuota_id }}
               </td>
               <td class="text-center">#{{ cuota.numero }}</td>
@@ -69,7 +79,7 @@
         </table>
       </div>
       <div class="d-flex justify-content-between align-items-center">
-        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Marca las cuotas que vas a pagar e ingresa el monto de cada una (no puede superar su saldo).</p>
+        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>Marca las cuotas que vas a pagar: el monto se completa solo con su saldo (puedes editarlo para un abono parcial). Usa el check del encabezado para marcarlas todas de una vez.</p>
         <div class="d-flex gap-2">
           <a href="{% url plan_url documento.pk %}" class="btn btn-outline-secondary">Cancelar</a>
           <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Registrar pago</button>
@@ -84,7 +94,46 @@
 
 <script>
 (function () {
-  // Marcar el checkbox "Pagar" automáticamente si el usuario ya escribió un monto.
+  // Al marcar "Pagar" en una fila, autocompleta el monto con el saldo de esa
+  // cuota (si el usuario ya había escrito algo, no se lo pisa: permite abono
+  // parcial). Al desmarcar, limpia el monto para que no quede un valor viejo.
+  function autocompletarMonto(checkbox) {
+    var row = checkbox.closest('tr');
+    var montoInput = row ? row.querySelector('input[name$="-monto"]') : null;
+    if (!montoInput) return;
+    if (checkbox.checked) {
+      if (!montoInput.value || parseFloat(montoInput.value) === 0) {
+        montoInput.value = row.dataset.saldo || '';
+      }
+    } else {
+      montoInput.value = '';
+    }
+  }
+
+  var pagarTodas = document.getElementById('pagarTodasCheckbox');
+  var filaCheckboxes = document.querySelectorAll('tbody input[name$="-pagar"]');
+
+  filaCheckboxes.forEach(function (checkbox) {
+    checkbox.addEventListener('change', function () {
+      autocompletarMonto(this);
+      // Si se desmarca una fila a mano, "marcar todas" deja de reflejar la realidad.
+      if (pagarTodas && !this.checked) pagarTodas.checked = false;
+    });
+  });
+
+  // Checkbox del encabezado: marca/desmarca y autocompleta TODAS las filas
+  // de una sola vez -- justo lo que pediste para no escribir cuota por cuota.
+  if (pagarTodas) {
+    pagarTodas.addEventListener('change', function () {
+      filaCheckboxes.forEach(function (checkbox) {
+        checkbox.checked = pagarTodas.checked;
+        autocompletarMonto(checkbox);
+      });
+    });
+  }
+
+  // Si el usuario prefiere escribir el monto directamente (pago parcial sin
+  // marcar antes), se marca "Pagar" solo con que escriba algo.
   document.querySelectorAll('input[name$="-monto"]').forEach(function (montoInput) {
     montoInput.addEventListener('input', function () {
       var row = this.closest('tr');
