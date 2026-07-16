@@ -273,3 +273,71 @@ class PortalDescargaComprobanteTests(TestCase):
         c = Client(); c.force_login(self.user)
         self.assertEqual(c.get(f'/portal/facturas/{otra.pk}/ride/').status_code, 404)
         self.assertEqual(c.get(f'/portal/facturas/{otra.pk}/xml/').status_code, 404)
+
+
+# =====================================================================
+# IVA 0% / 15% por producto
+# =====================================================================
+class IvaPorProductoTests(TestCase):
+    """Productos con iva_tarifa_0=True no generan IVA; el resto factura al
+    15%. Una factura puede combinar ambos, y el XML refleja cada tarifa por
+    separado (un bloque totalImpuesto por tarifa presente)."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+        from billing.models import Product
+        cls.exento = Product.objects.create(
+            name='Exento', brand=cls.brand, group=cls.group,
+            unit_price=Decimal('5.00'), stock=20, is_active=True, iva_tarifa_0=True,
+        )
+        cls.admin = User.objects.create_superuser('admin_iva', 'a@a.com', 'pass12345')
+
+    def test_factura_mixta_calcula_iva_solo_del_gravado(self):
+        c = Client(); c.force_login(self.admin)
+        c.post('/invoices/create/', {
+            'customer': self.customer.pk,
+            'details-TOTAL_FORMS': '2', 'details-INITIAL_FORMS': '0',
+            'details-MIN_NUM_FORMS': '0', 'details-MAX_NUM_FORMS': '1000',
+            'details-0-product': self.product.pk, 'details-0-quantity': '2', 'details-0-unit_price': '10.00',
+            'details-1-product': self.exento.pk, 'details-1-quantity': '1', 'details-1-unit_price': '5.00',
+        }, follow=True)
+        invoice = Invoice.objects.latest('id')
+        self.assertEqual(invoice.subtotal, Decimal('25.00'))
+        self.assertEqual(invoice.tax, Decimal('3.00'))    # 15% de 20; el exento no aporta
+        self.assertEqual(invoice.total, Decimal('28.00'))
+
+    def test_xml_de_factura_mixta_tiene_dos_bloques_totalimpuesto(self):
+        inv = _factura(self.customer, total='28.00', subtotal='25.00', tax='3.00')
+        inv.details.create(product=self.product, quantity=2, unit_price=Decimal('10.00'), subtotal=Decimal('20.00'))
+        inv.details.create(product=self.exento, quantity=1, unit_price=Decimal('5.00'), subtotal=Decimal('5.00'))
+        xml = generar_xml_factura(inv)
+        self.assertEqual(xml.count('<totalImpuesto>'), 2)
+        self.assertIn('<codigoPorcentaje>4</codigoPorcentaje>', xml)
+        self.assertIn('<codigoPorcentaje>0</codigoPorcentaje>', xml)
+
+    def test_xml_de_factura_solo_gravada_tiene_un_bloque(self):
+        inv = self._factura_solo_gravada()
+        xml = generar_xml_factura(inv)
+        self.assertEqual(xml.count('<totalImpuesto>'), 1)
+
+    def _factura_solo_gravada(self):
+        inv = _factura(self.customer)
+        inv.details.create(product=self.product, quantity=5, unit_price=Decimal('10.00'), subtotal=Decimal('50.00'))
+        return inv
+
+    def test_portal_checkout_respeta_tarifa_0(self):
+        call_command('setup_roles')
+        user = User.objects.create_user('cliente_iva', password='x')
+        user.groups.add(Group.objects.get(name='Cliente'))
+        self.customer.user = user
+        self.customer.save(update_fields=['user'])
+
+        c = Client(); c.force_login(user)
+        c.post(f'/portal/carrito/agregar/{self.product.pk}/', {'qty': 2})
+        c.post(f'/portal/carrito/agregar/{self.exento.pk}/', {'qty': 1})
+        c.post('/portal/checkout/', follow=True)
+
+        invoice = Invoice.objects.filter(customer=self.customer).latest('id')
+        self.assertEqual(invoice.subtotal, Decimal('25.00'))
+        self.assertEqual(invoice.tax, Decimal('3.00'))
+        self.assertEqual(invoice.total, Decimal('28.00'))

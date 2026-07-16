@@ -12,6 +12,7 @@
       <span class="badge bg-secondary ms-1">{{ visible_count }}/{{ total_columns }}</span>
     </button>
     {% include 'billing/_export_buttons.html' %}
+    <a href="{% url 'billing:iva_report' %}" class="btn btn-outline-dark"><i class="bi bi-calculator"></i>Reporte de IVA</a>
     {% if perms.billing.add_invoice %}
     <a href="{% url 'billing:invoice_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg"></i>Nueva factura</a>
     {% endif %}

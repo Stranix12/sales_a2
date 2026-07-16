@@ -11,11 +11,14 @@ from django.utils import timezone
 
 from lxml import etree
 
-# Código del SRI para el IVA 15% (codigoPorcentaje 4). El proyecto factura
-# siempre con IVA 15%, así que se fija aquí.
-IVA_CODIGO = '2'            # 2 = IVA
-IVA_COD_PORCENTAJE = '4'    # 4 = 15%
-IVA_TARIFA = '15.00'
+# Catálogo del SRI para el IVA: código de impuesto (2 = IVA) y código de
+# porcentaje según la tarifa de cada producto (ver Product.iva_tarifa_0).
+IVA_CODIGO = '2'  # 2 = IVA
+_TARIFAS = {
+    # iva_tarifa_0 -> (codigoPorcentaje, tarifa%)
+    True:  ('0', '0.00'),
+    False: ('4', '15.00'),
+}
 
 
 def _dec(valor):
@@ -76,12 +79,23 @@ def generar_xml_factura(invoice):
     etree.SubElement(inf, 'totalSinImpuestos').text = _dec(invoice.subtotal)
     etree.SubElement(inf, 'totalDescuento').text = '0.00'
 
+    detalles_qs = list(invoice.details.select_related('product'))
+
+    # Un bloque totalImpuesto POR TARIFA presente en la factura (una factura
+    # puede combinar productos con tarifa 0% y 15%): se agrupa por
+    # iva_tarifa_0, no se asume una sola tarifa para toda la factura.
     tci = etree.SubElement(inf, 'totalConImpuestos')
-    ti = etree.SubElement(tci, 'totalImpuesto')
-    etree.SubElement(ti, 'codigo').text = IVA_CODIGO
-    etree.SubElement(ti, 'codigoPorcentaje').text = IVA_COD_PORCENTAJE
-    etree.SubElement(ti, 'baseImponible').text = _dec(invoice.subtotal)
-    etree.SubElement(ti, 'valor').text = _dec(invoice.tax)
+    for exento in (False, True):  # 15% primero, luego 0% (si hay)
+        base = sum((d.subtotal for d in detalles_qs if d.product.iva_tarifa_0 == exento), Decimal('0'))
+        if base == 0:
+            continue
+        valor = Decimal('0') if exento else (base * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        cod_porcentaje, _tarifa_pct = _TARIFAS[exento]
+        ti = etree.SubElement(tci, 'totalImpuesto')
+        etree.SubElement(ti, 'codigo').text = IVA_CODIGO
+        etree.SubElement(ti, 'codigoPorcentaje').text = cod_porcentaje
+        etree.SubElement(ti, 'baseImponible').text = _dec(base)
+        etree.SubElement(ti, 'valor').text = _dec(valor)
 
     etree.SubElement(inf, 'propina').text = '0.00'
     etree.SubElement(inf, 'importeTotal').text = _dec(invoice.total)
@@ -102,7 +116,10 @@ def generar_xml_factura(invoice):
 
     # --- detalles ---
     detalles = etree.SubElement(factura, 'detalles')
-    for d in invoice.details.select_related('product'):
+    for d in detalles_qs:
+        cod_porcentaje, tarifa_pct = _TARIFAS[d.product.iva_tarifa_0]
+        iva_linea = (Decimal('0') if d.product.iva_tarifa_0
+                     else (Decimal(d.subtotal) * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
         det = etree.SubElement(detalles, 'detalle')
         etree.SubElement(det, 'codigoPrincipal').text = f'P{d.product_id}'
         etree.SubElement(det, 'descripcion').text = d.product.name
@@ -113,10 +130,9 @@ def generar_xml_factura(invoice):
         imps = etree.SubElement(det, 'impuestos')
         imp = etree.SubElement(imps, 'impuesto')
         etree.SubElement(imp, 'codigo').text = IVA_CODIGO
-        etree.SubElement(imp, 'codigoPorcentaje').text = IVA_COD_PORCENTAJE
-        etree.SubElement(imp, 'tarifa').text = IVA_TARIFA
+        etree.SubElement(imp, 'codigoPorcentaje').text = cod_porcentaje
+        etree.SubElement(imp, 'tarifa').text = tarifa_pct
         etree.SubElement(imp, 'baseImponible').text = _dec(d.subtotal)
-        iva_linea = (Decimal(d.subtotal) * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         etree.SubElement(imp, 'valor').text = _dec(iva_linea)
 
     # --- infoAdicional ---

@@ -209,7 +209,7 @@ def build_ride_pdf_bytes(invoice):
     # ---------------- Totales (caja resaltada a la derecha) ----------------
     tot = Table([
         ['Subtotal', _money(invoice.subtotal)],
-        ['IVA (15%)', _money(invoice.tax)],
+        ['IVA', _money(invoice.tax)],
         ['TOTAL', _money(invoice.total)],
     ], colWidths=[3.5 * cm, 3 * cm], hAlign='RIGHT')
     tot.setStyle(TableStyle([

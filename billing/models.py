@@ -57,6 +57,10 @@ class Product(models.Model):
                                      validators=[MinValueValidator(Decimal('0.01'))])
     stock = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     is_active = models.BooleanField(default=True)
+    # Tarifa 0% de IVA (ej. alimentos básicos, medicinas): por defecto los
+    # productos llevan la tarifa general (15%). Afecta tanto el cálculo del
+    # IVA de la factura como el XML del comprobante electrónico del SRI.
+    iva_tarifa_0 = models.BooleanField(default=False, verbose_name='Tarifa 0% de IVA')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:

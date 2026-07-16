@@ -7,7 +7,7 @@ por modelo), aquí el control de acceso es **por fila**: cada vista opera
 (request.user.customer_account). Por eso el rol Cliente no recibe ningún
 permiso de modelo en setup_roles.
 """
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from functools import wraps
 
 from django import forms
@@ -21,6 +21,7 @@ from . import paypal
 from .electronic import asignar_datos_electronicos
 from .invoice_export import invoice_pdf_response
 from .models import Customer, Invoice, InvoiceDetail, Product
+from .pricing import calcular_subtotal_iva
 from .views import _apply_payment
 from shared.emails import send_invoice_email_async
 
@@ -281,7 +282,7 @@ def portal_cart_add(request, pk):
 @customer_required
 def portal_cart(request):
     lines, subtotal = _cart_lines(request)
-    tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    _, tax = calcular_subtotal_iva((l['product'], l['subtotal']) for l in lines)
     return render(request, 'billing/portal/cart.html', {
         'lines': lines,
         'subtotal': subtotal,
@@ -361,16 +362,16 @@ def portal_checkout(request):
                 messages.error(request, err)
         else:
             invoice = Invoice.objects.create(customer=request.customer)
-            subtotal = Decimal('0')
+            detalles = []
             for product, qty in lines:
                 detail = InvoiceDetail.objects.create(
                     invoice=invoice, product=product, quantity=qty,
                     unit_price=product.unit_price)
-                subtotal += detail.subtotal
+                detalles.append(detail)
                 product.stock -= qty
                 product.save(update_fields=['stock'])
-            invoice.subtotal = subtotal
-            invoice.tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            invoice.subtotal, invoice.tax = calcular_subtotal_iva(
+                (d.product, d.subtotal) for d in detalles)
             invoice.total = invoice.subtotal + invoice.tax
             invoice.save()
             asignar_datos_electronicos(invoice)

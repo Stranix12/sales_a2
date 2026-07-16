@@ -58,6 +58,13 @@
             <div class="col-md-6">{% include 'billing/_field.html' with field=form.stock %}</div>
           </div>
 
+          <!-- Tarifa de IVA (switch) -->
+          <div class="form-check form-switch mt-2">
+            {{ form.iva_tarifa_0 }}
+            <label class="form-check-label fw-semibold" for="{{ form.iva_tarifa_0.id_for_label }}">{{ form.iva_tarifa_0.label }}</label>
+          </div>
+          <div class="form-text">{{ form.iva_tarifa_0.help_text }}</div>
+
           <!-- Estado (switch) -->
           <div class="form-check form-switch mt-2">
             {{ form.is_active }}

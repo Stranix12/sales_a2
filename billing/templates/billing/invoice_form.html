@@ -109,7 +109,7 @@
               <td class="text-end fw-semibold" id="preview-subtotal">$0.00</td>
             </tr>
             <tr>
-              <td class="text-muted">IVA (15%)</td>
+              <td class="text-muted">IVA</td>
               <td class="text-end fw-semibold" id="preview-tax">$0.00</td>
             </tr>
             <tr class="table-warning">
@@ -121,7 +121,7 @@
       </div>
 
       <div class="d-flex justify-content-between align-items-center mt-3">
-        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>El IVA (15%) se calcula automáticamente al guardar.</p>
+        <p class="text-muted small mb-0"><i class="bi bi-info-circle me-1"></i>El IVA se calcula según la tarifa de cada producto (0% o 15%) al guardar.</p>
         <div class="d-flex gap-2">
           <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary">Cancelar</a>
           <button type="submit" class="btn btn-warning"><i class="bi bi-save me-1"></i>Guardar factura</button>
@@ -202,12 +202,18 @@
   }
 
   function updateTotals() {
+    // Igual que el backend (billing/pricing.py): el IVA es por línea, no
+    // global -- los productos con tarifa 0% no aportan impuesto.
     let subtotal = 0;
+    let tax = 0;
     tbody.querySelectorAll('tr.detail-row').forEach(row => {
       const text = row.querySelector('.subtotal-cell').textContent;
-      subtotal += parseFloat(text.replace('$', '')) || 0;
+      const lineSubtotal = parseFloat(text.replace('$', '')) || 0;
+      subtotal += lineSubtotal;
+      const sel = row.querySelector('select[id$="-product"]');
+      const data = sel ? PRODUCTS[sel.value] : null;
+      if (!(data && data.ivaTarifa0)) tax += Math.round(lineSubtotal * 0.15 * 100) / 100;
     });
-    const tax = subtotal * 0.15;
     document.getElementById('preview-subtotal').textContent = '$' + subtotal.toFixed(2);
     document.getElementById('preview-tax').textContent = '$' + tax.toFixed(2);
     document.getElementById('preview-total').textContent = '$' + (subtotal + tax).toFixed(2);

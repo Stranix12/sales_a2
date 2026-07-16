@@ -1,0 +1,121 @@
+{% extends 'billing/base.html' %}
+{% block title %}Reporte de IVA{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="page-head-title">
+    <h2><span class="head-ico"><i class="bi bi-receipt-cutoff"></i></span>Reporte de IVA</h2>
+  </div>
+  <div class="page-head-actions">
+    <a href="{% url 'billing:iva_report_pdf' %}?{{ request.GET.urlencode }}" class="btn btn-outline-danger"><i class="bi bi-file-earmark-pdf"></i>PDF</a>
+    <a href="{% url 'billing:iva_report_excel' %}?{{ request.GET.urlencode }}" class="btn btn-outline-success"><i class="bi bi-file-earmark-excel"></i>Excel</a>
+    <a href="{% url 'billing:invoice_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i>Volver a facturas</a>
+  </div>
+</div>
+
+<form method="get" class="filter-card">
+  <div class="filter-card-head"><i class="bi bi-funnel"></i>Período</div>
+  {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="row g-3">
+    <div class="col-md-3">
+      <label class="form-label">Desde</label>
+      {{ form.date_from }}
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Hasta</label>
+      {{ form.date_to }}
+    </div>
+    <div class="col-md-4 d-flex align-items-end gap-2">
+      <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i>Aplicar</button>
+      <a href="{% url 'billing:iva_report' %}" class="btn btn-outline-secondary">Mes actual</a>
+    </div>
+  </div>
+</form>
+
+<p class="text-muted small mb-3">
+  <i class="bi bi-info-circle me-1"></i>
+  Período mostrado: <strong>{{ date_from|date:"d/m/Y" }}</strong> — <strong>{{ date_to|date:"d/m/Y" }}</strong>.
+  Se calcula sobre la fecha de <strong>emisión</strong> de cada factura (como exige el SRI), sin importar si ya se cobró.
+</p>
+
+<!-- Resumen del período -->
+<div class="card mb-4">
+  <div class="card-header">
+    <span class="head-ico"><i class="bi bi-calculator"></i></span>
+    <h5 class="mb-0 fw-bold">Resumen del período</h5>
+  </div>
+  <div class="card-body p-4">
+    <div class="row g-3">
+      <div class="col-6 col-lg-3">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">Base imponible 15%</div>
+          <div class="fs-5 fw-bold">${{ totales.base_15 }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">IVA generado (15%)</div>
+          <div class="fs-5 fw-bold">${{ totales.iva_15 }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">Base imponible 0%</div>
+          <div class="fs-5 fw-bold">${{ totales.base_0 }}</div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-3">
+        <div class="border rounded-3 p-3 h-100">
+          <div class="text-muted small text-uppercase fw-semibold mb-1">Total base imponible</div>
+          <div class="fs-5 fw-bold">${{ totales.total_base }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="row g-3 mt-1">
+      <div class="col-12">
+        <div class="rounded-3 p-3" style="background:var(--c-primary-050)">
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="text-uppercase small fw-semibold" style="color:var(--c-primary-700)">Total a declarar (base + IVA)</span>
+            <span class="fs-4 fw-bold" style="color:var(--c-primary-700)">${{ totales.total }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detalle por factura -->
+<div class="data-table table-fade">
+  <div class="table-scroll">
+    <table class="table table-hover align-middle">
+      <thead>
+        <tr>
+          <th>N.º Factura</th>
+          <th>Fecha</th>
+          <th>Cliente</th>
+          <th class="text-end">Base 15%</th>
+          <th class="text-end">IVA 15%</th>
+          <th class="text-end">Base 0%</th>
+          <th class="text-end">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in filas %}
+        <tr>
+          <td><a href="{% url 'billing:invoice_detail' fila.invoice.pk %}" class="cell-primary">{{ fila.invoice.numero_factura|default:fila.invoice.id }}</a></td>
+          <td class="cell-sub">{{ fila.invoice.invoice_date|date:'d/m/Y' }}</td>
+          <td>{{ fila.invoice.customer }}</td>
+          <td class="text-end">${{ fila.base_15 }}</td>
+          <td class="text-end">${{ fila.iva_15 }}</td>
+          <td class="text-end">${{ fila.base_0 }}</td>
+          <td class="text-end fw-semibold">${{ fila.total }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7">
+          <div class="empty-state"><i class="bi bi-receipt"></i>No hay facturas en este período.</div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 import json
 import math
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
@@ -15,8 +15,10 @@ from .models import *
 from .forms import (BrandForm, BrandFilterForm, ProductFilterForm, ProductForm,
                     CustomerForm, CustomerFilterForm, InvoiceForm, InvoiceDetailFormSet,
                     ProductGroupForm, ProductGroupFilterForm, SupplierForm, SupplierFilterForm,
-                    InvoiceFilterForm)
+                    InvoiceFilterForm, IvaReportFilterForm)
 from .mixins import ExportListMixin
+from .pricing import calcular_subtotal_iva, desglose_iva_por_tarifa
+from .reports import iva_report_excel_response, iva_report_pdf_response
 from .electronic import asignar_datos_electronicos
 from .invoice_export import invoice_pdf_response
 from . import paypal
@@ -499,6 +501,65 @@ class InvoiceListView(ExportListMixin, PermissionRequiredMixin, ListView):
         ctx['filter_form'] = self.filter_form
         return ctx
 
+
+def _iva_report_data(request):
+    """Arma el período (por defecto: el mes en curso) y las filas/totales del
+    reporte de IVA. Compartido por la vista de pantalla y las de descarga
+    para que ambas calculen exactamente lo mismo."""
+    hoy = timezone.localdate()
+    form = IvaReportFilterForm(request.GET or None)
+    date_from, date_to = hoy.replace(day=1), hoy
+    if form.is_valid():
+        date_from = form.cleaned_data.get('date_from') or date_from
+        date_to = form.cleaned_data.get('date_to') or date_to
+
+    invoices = (Invoice.objects
+                .filter(invoice_date__date__gte=date_from, invoice_date__date__lte=date_to)
+                .exclude(payment_status='ANULADA')
+                .select_related('customer')
+                .prefetch_related('details__product')
+                .order_by('invoice_date'))
+
+    filas = []
+    totales = {'base_15': Decimal('0'), 'iva_15': Decimal('0'), 'base_0': Decimal('0'),
+              'total_base': Decimal('0'), 'total_iva': Decimal('0'), 'total': Decimal('0')}
+    for inv in invoices:
+        desglose = desglose_iva_por_tarifa((d.product, d.subtotal) for d in inv.details.all())
+        filas.append({'invoice': inv, **desglose})
+        for k in totales:
+            totales[k] += desglose[k]
+
+    return form, date_from, date_to, filas, totales
+
+
+@login_required
+@permission_required('billing.view_invoice', raise_exception=True)
+def iva_report(request):
+    """Reporte de IVA por período: base imponible y IVA generado por tarifa
+    (15%/0%), pensado para la declaración de impuestos (Formulario 104 del
+    SRI). Se basa en la fecha de EMISIÓN de la factura (devengo), no en si ya
+    se cobró -- así es como el SRI exige declarar el IVA."""
+    form, date_from, date_to, filas, totales = _iva_report_data(request)
+    return render(request, 'billing/iva_report.html', {
+        'form': form, 'date_from': date_from, 'date_to': date_to,
+        'filas': filas, 'totales': totales,
+    })
+
+
+@login_required
+@permission_required('billing.view_invoice', raise_exception=True)
+def iva_report_pdf(request):
+    _, date_from, date_to, filas, totales = _iva_report_data(request)
+    return iva_report_pdf_response(date_from, date_to, filas, totales)
+
+
+@login_required
+@permission_required('billing.view_invoice', raise_exception=True)
+def iva_report_excel(request):
+    _, date_from, date_to, filas, totales = _iva_report_data(request)
+    return iva_report_excel_response(date_from, date_to, filas, totales)
+
+
 @login_required
 @permission_required('billing.add_invoice', raise_exception=True)
 def invoice_create(request):
@@ -542,9 +603,10 @@ def invoice_create(request):
                     for pid, qty in needed.items():
                         locked[pid].stock -= qty
                         locked[pid].save(update_fields=['stock'])
-                    subtotal = sum((d.subtotal for d in invoice.details.all()), Decimal('0'))
+                    details = list(invoice.details.select_related('product').all())
+                    subtotal, tax = calcular_subtotal_iva((d.product, d.subtotal) for d in details)
                     invoice.subtotal = subtotal
-                    invoice.tax = (subtotal * Decimal('0.15')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    invoice.tax = tax
                     invoice.total = invoice.subtotal + invoice.tax
                     invoice.save()
 
@@ -577,8 +639,9 @@ def invoice_create(request):
         formset = InvoiceDetailFormSet()
 
     products_data = {
-        str(p.id): {'price': str(p.unit_price), 'stock': p.stock, 'name': p.name}
-        for p in Product.objects.filter(is_active=True).only('id', 'unit_price', 'stock', 'name')
+        str(p.id): {'price': str(p.unit_price), 'stock': p.stock, 'name': p.name,
+                    'ivaTarifa0': p.iva_tarifa_0}
+        for p in Product.objects.filter(is_active=True).only('id', 'unit_price', 'stock', 'name', 'iva_tarifa_0')
     }
     return render(request, 'billing/invoice_form.html', {
         'form': form,

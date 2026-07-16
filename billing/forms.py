@@ -90,7 +90,7 @@ class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
         fields = ['name', 'description', 'image', 'brand', 'group',
-                  'suppliers', 'unit_price', 'stock', 'is_active']
+                  'suppliers', 'unit_price', 'stock', 'iva_tarifa_0', 'is_active']
         labels = {
             'name': 'Nombre',
             'description': 'Descripción',
@@ -100,6 +100,7 @@ class ProductForm(forms.ModelForm):
             'suppliers': 'Proveedores',
             'unit_price': 'Precio unitario',
             'stock': 'Stock',
+            'iva_tarifa_0': 'Tarifa 0% de IVA',
             'is_active': 'Activo',
         }
         help_texts = {
@@ -107,6 +108,7 @@ class ProductForm(forms.ModelForm):
             'unit_price': 'Valor por unidad. Debe ser mayor que cero.',
             'stock': 'Cantidad disponible en inventario.',
             'suppliers': 'Mantén pulsado Ctrl para seleccionar varios.',
+            'iva_tarifa_0': 'Actívalo para productos exentos (ej. alimentos básicos, medicinas). Por defecto se factura con la tarifa general (15%).',
         }
         widgets = {
             'name': forms.TextInput(attrs={
@@ -125,6 +127,7 @@ class ProductForm(forms.ModelForm):
             'stock': forms.NumberInput(attrs={
                 'class': 'form-control', 'min': '0', 'step': '1',
                 'placeholder': '0', 'id': 'id_stock'}),
+            'iva_tarifa_0': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
         }
         error_messages = {
@@ -341,3 +344,19 @@ class InvoiceFilterForm(forms.Form):
                               widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}))
     is_active = forms.ChoiceField(required=False, choices=ACTIVE_CHOICES,
                                   widget=forms.Select(attrs={'class': 'form-select'}))
+
+
+class IvaReportFilterForm(forms.Form):
+    """Rango de fechas del reporte de IVA (por defecto: el mes en curso, para
+    que abrir el reporte sin filtrar ya muestre algo útil)."""
+    date_from = forms.DateField(required=False, label='Desde',
+                                widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}))
+    date_to = forms.DateField(required=False, label='Hasta',
+                              widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}))
+
+    def clean(self):
+        cleaned = super().clean()
+        d_from, d_to = cleaned.get('date_from'), cleaned.get('date_to')
+        if d_from and d_to and d_from > d_to:
+            raise forms.ValidationError('La fecha "Desde" no puede ser posterior a "Hasta".')
+        return cleaned
