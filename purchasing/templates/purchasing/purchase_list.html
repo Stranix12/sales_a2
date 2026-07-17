@@ -1,5 +1,5 @@
 {% extends 'billing/base.html' %}
-{% block title %}Purchases{% endblock %}
+{% block title %}Compras{% endblock %}
 {% block content %}
 <div class="page-head">
   <div class="page-head-title">
@@ -7,9 +7,11 @@
     <span class="count-chip"><i class="bi bi-hash"></i>{{ purchases|length }} registro{{ purchases|length|pluralize:"s" }}</span>
   </div>
   <div class="page-head-actions">
+    {% if perms.purchasing.view_purchase_report %}
     <a href="{% url 'purchasing:purchase_report' %}" class="btn btn-outline-dark">
       <i class="bi bi-bar-chart"></i>Reporte de costo prom.
     </a>
+    {% endif %}
     {% if perms.purchasing.add_purchase %}
     <a href="{% url 'purchasing:purchase_create' %}" class="btn btn-primary">
       <i class="bi bi-plus-lg"></i>Nueva compra
@@ -70,7 +72,9 @@
           <td class="text-end">${{ purchase.tax }}</td>
           <td class="text-end"><span class="fw-semibold">${{ purchase.total }}</span></td>
           <td class="row-actions">
+            {% if perms.purchasing.view_purchase %}
             <a href="{% url 'purchasing:purchase_detail' purchase.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
+            {% endif %}
             <a href="{% url 'purchasing:purchase_export_pdf' purchase.pk %}" class="act-btn act-edit" title="Exportar a PDF"><i class="bi bi-file-earmark-pdf"></i></a>
             <a href="{% url 'purchasing:purchase_export_excel' purchase.pk %}" class="act-btn act-edit" title="Exportar a Excel"><i class="bi bi-file-earmark-excel"></i></a>
             {% if perms.purchasing.delete_purchase %}

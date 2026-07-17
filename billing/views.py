@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
+from shared.mixins import AnyPermissionRequiredMixin
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.db import transaction
@@ -137,9 +138,10 @@ def home(request):
     return render(request, 'billing/home.html', context)
 
 # === BRAND (lista CBV + create/update/delete FBV con auditoría) ===
-class BrandListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class BrandListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     model = Brand
-    permission_required = 'billing.view_brand'
+    permission_required = ('billing.view_brand', 'billing.add_brand',
+                           'billing.change_brand', 'billing.delete_brand')
     template_name = 'billing/brand_list.html'
     context_object_name = 'items'
     paginate_by = 10
@@ -184,10 +186,10 @@ def brand_create(request):
         form = BrandForm(request.POST)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Brand created!')
+            messages.success(request, 'Marca creada correctamente.')
             return redirect('billing:brand_list')
     else: form = BrandForm()
-    return render(request, 'billing/brand_form.html', {'form':form, 'title':'Create Brand'})
+    return render(request, 'billing/brand_form.html', {'form':form, 'title':'Nueva marca'})
 
 @login_required
 @permission_required('billing.change_brand', raise_exception=True)
@@ -198,10 +200,10 @@ def brand_update(request, pk):
         form = BrandForm(request.POST, instance=brand)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Brand updated!')
+            messages.success(request, 'Marca actualizada correctamente.')
             return redirect('billing:brand_list')
     else: form = BrandForm(instance=brand)
-    return render(request, 'billing/brand_form.html', {'form':form, 'title':'Edit Brand'})
+    return render(request, 'billing/brand_form.html', {'form':form, 'title':'Editar marca'})
 
 @login_required
 @permission_required('billing.delete_brand', raise_exception=True)
@@ -210,14 +212,15 @@ def brand_delete(request, pk):
     brand = get_object_or_404(Brand, pk=pk)
     if request.method == 'POST':
         brand.delete()
-        messages.success(request, 'Brand deleted!')
+        messages.success(request, 'Marca eliminada correctamente.')
         return redirect('billing:brand_list')
     return render(request, 'billing/brand_confirm_delete.html', {'object': brand})
 
 # === PRODUCTGROUP (CBV) ===
-class ProductGroupListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class ProductGroupListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     model = ProductGroup
-    permission_required = 'billing.view_productgroup'
+    permission_required = ('billing.view_productgroup', 'billing.add_productgroup',
+                           'billing.change_productgroup', 'billing.delete_productgroup')
     template_name = 'billing/productgroup_list.html'
     context_object_name = 'items'
     paginate_by = 10
@@ -260,9 +263,10 @@ class ProductGroupDeleteView(PermissionRequiredMixin, DeleteView):
     model = ProductGroup; template_name = 'billing/productgroup_confirm_delete.html'; success_url = reverse_lazy('billing:productgroup_list')
 
 # === SUPPLIER (CBV) ===
-class SupplierListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class SupplierListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     model = Supplier
-    permission_required = 'billing.view_supplier'
+    permission_required = ('billing.view_supplier', 'billing.add_supplier',
+                           'billing.change_supplier', 'billing.delete_supplier')
     template_name = 'billing/supplier_list.html'
     context_object_name = 'items'
     paginate_by = 10
@@ -312,9 +316,10 @@ class SupplierDeleteView(PermissionRequiredMixin, DeleteView):
     model = Supplier; template_name = 'billing/supplier_confirm_delete.html'; success_url = reverse_lazy('billing:supplier_list')
 
 # === PRODUCT (CBV) ===
-class ProductListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class ProductListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     model = Product
-    permission_required = 'billing.view_product'
+    permission_required = ('billing.view_product', 'billing.add_product',
+                           'billing.change_product', 'billing.delete_product')
     template_name = 'billing/product_list.html'
     context_object_name = 'items'
     paginate_by = 3
@@ -389,9 +394,10 @@ class ProductDeleteView(PermissionRequiredMixin, DeleteView):
     model = Product; template_name = 'billing/product_confirm_delete.html'; success_url = reverse_lazy('billing:product_list')
 
 # === CUSTOMER (CBV) ===
-class CustomerListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class CustomerListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     model = Customer
-    permission_required = 'billing.view_customer'
+    permission_required = ('billing.view_customer', 'billing.add_customer',
+                           'billing.change_customer', 'billing.delete_customer')
     template_name = 'billing/customer_list.html'
     context_object_name = 'items'
     paginate_by = 10
@@ -461,9 +467,10 @@ class CustomerDeleteView(PermissionRequiredMixin, DeleteView):
             return redirect('billing:customer_list')
 
 # === INVOICE (lista CBV + create/detail/delete FBV con formset) ===
-class InvoiceListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class InvoiceListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     model = Invoice
-    permission_required = 'billing.view_invoice'
+    permission_required = ('billing.view_invoice', 'billing.add_invoice',
+                           'billing.change_invoice', 'billing.delete_invoice')
     template_name = 'billing/invoice_list.html'
     context_object_name = 'items'
     paginate_by = 10
@@ -533,7 +540,7 @@ def _iva_report_data(request):
 
 
 @login_required
-@permission_required('billing.view_invoice', raise_exception=True)
+@permission_required('billing.view_iva_report', raise_exception=True)
 def iva_report(request):
     """Reporte de IVA por período: base imponible y IVA generado por tarifa
     (15%/0%), pensado para la declaración de impuestos (Formulario 104 del
@@ -547,14 +554,14 @@ def iva_report(request):
 
 
 @login_required
-@permission_required('billing.view_invoice', raise_exception=True)
+@permission_required('billing.view_iva_report', raise_exception=True)
 def iva_report_pdf(request):
     _, date_from, date_to, filas, totales = _iva_report_data(request)
     return iva_report_pdf_response(date_from, date_to, filas, totales)
 
 
 @login_required
-@permission_required('billing.view_invoice', raise_exception=True)
+@permission_required('billing.view_iva_report', raise_exception=True)
 def iva_report_excel(request):
     _, date_from, date_to, filas, totales = _iva_report_data(request)
     return iva_report_excel_response(date_from, date_to, filas, totales)
@@ -687,7 +694,7 @@ def _apply_payment(invoice, user, method, note=''):
 
 
 @login_required
-@permission_required('billing.change_invoice', raise_exception=True)
+@permission_required('billing.mark_paid_invoice', raise_exception=True)
 def invoice_mark_paid(request, pk):
     """Marca una factura como PAGADA con un método manual (efectivo,
     transferencia, tarjeta). Solo por POST."""
@@ -710,7 +717,7 @@ def invoice_mark_paid(request, pk):
 
 
 @login_required
-@permission_required('billing.change_invoice', raise_exception=True)
+@permission_required('billing.charge_invoice_paypal', raise_exception=True)
 def invoice_paypal_start(request, pk):
     """Crea la orden en PayPal (Sandbox) y redirige al usuario a aprobarla."""
     invoice = get_object_or_404(Invoice, pk=pk)
@@ -734,7 +741,7 @@ def invoice_paypal_start(request, pk):
 
 
 @login_required
-@permission_required('billing.change_invoice', raise_exception=True)
+@permission_required('billing.charge_invoice_paypal', raise_exception=True)
 def invoice_paypal_return(request, pk):
     """PayPal redirige aquí tras la aprobación del usuario; se captura el pago."""
     invoice = get_object_or_404(Invoice, pk=pk)
@@ -764,7 +771,7 @@ def invoice_paypal_return(request, pk):
 
 
 @login_required
-@permission_required('billing.change_invoice', raise_exception=True)
+@permission_required('billing.charge_invoice_paypal', raise_exception=True)
 def invoice_paypal_cancel(request, pk):
     """El usuario canceló el pago en PayPal: no se toca la factura."""
     invoice = get_object_or_404(Invoice, pk=pk)
@@ -791,6 +798,6 @@ def invoice_delete(request, pk):
                 'asociado (venta a crédito). Elimina primero sus cuotas o pagos.'
             )
             return redirect('billing:invoice_detail', pk=invoice_id)
-        messages.success(request, f'Invoice #{invoice_id} deleted!')
+        messages.success(request, f'Factura #{invoice_id} eliminada correctamente.')
         return redirect('billing:invoice_list')
     return render(request, 'billing/invoice_confirm_delete.html', {'object': invoice})

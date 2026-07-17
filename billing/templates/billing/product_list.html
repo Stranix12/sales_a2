@@ -1,11 +1,11 @@
 {% extends 'billing/base.html' %}
 {% load static %}
-{% block title %}Products{% endblock %}
+{% block title %}Productos{% endblock %}
 
 {% block content %}
 <div class="page-head">
   <div class="page-head-title">
-    <h2><span class="head-ico"><i class="bi bi-box-seam"></i></span>Products</h2>
+    <h2><span class="head-ico"><i class="bi bi-box-seam"></i></span>Productos</h2>
     <span class="count-chip"><i class="bi bi-hash"></i>{{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize:"s" }}</span>
   </div>
   <div class="page-head-actions">
@@ -25,23 +25,23 @@
   <div class="filter-card-head"><i class="bi bi-funnel"></i>Filtros</div>
   <div class="row g-3">
     <div class="col-md-3">
-      <label class="form-label">Name</label>
+      <label class="form-label">Nombre</label>
       {{ filter_form.name }}
     </div>
     <div class="col-md-3">
-      <label class="form-label">Brand</label>
+      <label class="form-label">Marca</label>
       {{ filter_form.brand }}
     </div>
     <div class="col-md-3">
-      <label class="form-label">Group</label>
+      <label class="form-label">Categoría</label>
       {{ filter_form.group }}
     </div>
     <div class="col-md-3">
-      <label class="form-label">Supplier</label>
+      <label class="form-label">Proveedor</label>
       {{ filter_form.supplier }}
     </div>
     <div class="col-md-3">
-      <label class="form-label">Price range</label>
+      <label class="form-label">Rango de precio</label>
       <div class="input-group">
         {{ filter_form.price_min }}
         {{ filter_form.price_max }}
@@ -49,7 +49,7 @@
       {% for e in filter_form.price_max.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
     </div>
     <div class="col-md-3">
-      <label class="form-label">Stock range</label>
+      <label class="form-label">Rango de stock</label>
       <div class="input-group">
         {{ filter_form.stock_min }}
         {{ filter_form.stock_max }}
@@ -57,7 +57,7 @@
       {% for e in filter_form.stock_max.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
     </div>
     <div class="col-md-3">
-      <label class="form-label">Status</label>
+      <label class="form-label">Estado</label>
       {{ filter_form.is_active }}
     </div>
     <div class="col-md-3 d-flex align-items-end gap-2">
@@ -154,7 +154,9 @@
           </td>
           {% endfor %}
           <td class="row-actions">
+            {% if perms.billing.view_product %}
             <a href="{% url 'billing:product_detail' item.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
+            {% endif %}
             {% if perms.billing.change_product %}
             <a href="{% url 'billing:product_update' item.pk %}" class="act-btn act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
             {% endif %}
@@ -175,24 +177,24 @@
 
 <!-- === Paginación (conserva los filtros) === -->
 {% if is_paginated %}
-<nav aria-label="Products pagination">
+<nav aria-label="Paginación de productos">
   <ul class="pagination justify-content-center">
     {% if page_obj.has_previous %}
-    <li class="page-item"><a class="page-link" href="?page=1{% if querystring %}&{{ querystring }}{% endif %}">&laquo; First</a></li>
-    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">Prev</a></li>
+    <li class="page-item"><a class="page-link" href="?page=1{% if querystring %}&{{ querystring }}{% endif %}">&laquo; Primera</a></li>
+    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">Anterior</a></li>
     {% else %}
-    <li class="page-item disabled"><span class="page-link">&laquo; First</span></li>
-    <li class="page-item disabled"><span class="page-link">Prev</span></li>
+    <li class="page-item disabled"><span class="page-link">&laquo; Primera</span></li>
+    <li class="page-item disabled"><span class="page-link">Anterior</span></li>
     {% endif %}
 
-    <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+    <li class="page-item active"><span class="page-link">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span></li>
 
     {% if page_obj.has_next %}
-    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">Next</a></li>
-    <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if querystring %}&{{ querystring }}{% endif %}">Last &raquo;</a></li>
+    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}">Siguiente</a></li>
+    <li class="page-item"><a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if querystring %}&{{ querystring }}{% endif %}">Última &raquo;</a></li>
     {% else %}
-    <li class="page-item disabled"><span class="page-link">Next</span></li>
-    <li class="page-item disabled"><span class="page-link">Last &raquo;</span></li>
+    <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
+    <li class="page-item disabled"><span class="page-link">Última &raquo;</span></li>
     {% endif %}
   </ul>
 </nav>

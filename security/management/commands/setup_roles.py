@@ -13,10 +13,12 @@ ROLES = {
         'view_customerprofile', 'add_customerprofile', 'change_customerprofile',
         'view_invoice', 'add_invoice', 'change_invoice',
         'view_invoicedetail', 'add_invoicedetail', 'change_invoicedetail',
+        'mark_paid_invoice', 'charge_invoice_paypal', 'view_iva_report',
         'view_product',
         'view_cuotaventa', 'add_cuotaventa', 'change_cuotaventa',
         'view_pagocuotaventa', 'add_pagocuotaventa',
         'view_comprobanteelectronico', 'add_comprobanteelectronico', 'change_comprobanteelectronico',
+        'send_comprobanteelectronico',
     ],
 
     # El Analista de Compras gestiona el catálogo completo y las compras,
@@ -27,6 +29,7 @@ ROLES = {
         'view_supplier', 'add_supplier', 'change_supplier', 'delete_supplier',
         'view_product', 'add_product', 'change_product', 'delete_product',
         'view_purchase', 'add_purchase', 'change_purchase', 'delete_purchase',
+        'view_purchase_report',
         'view_purchasedetail', 'add_purchasedetail', 'change_purchasedetail',
         'view_cuotacompra', 'add_cuotacompra', 'change_cuotacompra',
         'view_pagocuotacompra', 'add_pagocuotacompra',
@@ -40,7 +43,7 @@ ROLES = {
 }
 
 class Command(BaseCommand):
-    help = 'Crea los 3 roles del sistema con sus permisos'
+    help = 'Crea los 4 roles del sistema con sus permisos'
 
     def handle(self, *args, **kwargs):
         for role_name, codenames in ROLES.items():

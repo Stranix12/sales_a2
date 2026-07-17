@@ -57,7 +57,9 @@
           </td>
           {% endfor %}
           <td class="row-actions">
+            {% if perms.creditos_compras.view_cuotacompra %}
             <a href="{% url 'creditos_compras:plan_cuotas_compra' item.compra_id %}" class="act-btn act-view" title="Ver plan de cuotas"><i class="bi bi-eye"></i></a>
+            {% endif %}
           </td>
         </tr>
         {% empty %}

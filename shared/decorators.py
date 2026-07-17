@@ -1,10 +1,37 @@
 import logging
 from functools import wraps
 
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 
 # Logger de auditoría (los mensajes pueden redirigirse a archivo desde settings).
 logger = logging.getLogger('audit')
+
+
+def any_permission_required(perms, raise_exception=True):
+    """Como @permission_required, pero exige AL MENOS UNO de los permisos
+    listados en perms, no todos. Equivalente FBV de
+    shared.mixins.AnyPermissionRequiredMixin (para las pocas vistas de
+    listado que son función en vez de ListView, p. ej. purchase_list).
+
+    Uso:
+        @login_required
+        @any_permission_required(('purchasing.view_purchase', 'purchasing.add_purchase',
+                                  'purchasing.change_purchase', 'purchasing.delete_purchase'))
+        def purchase_list(request):
+            ...
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if any(request.user.has_perm(p) for p in perms):
+                return view_func(request, *args, **kwargs)
+            if raise_exception:
+                raise PermissionDenied
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        return wrapper
+    return decorator
 
 
 def audit_action(action_name):

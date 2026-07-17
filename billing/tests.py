@@ -347,6 +347,85 @@ class RolePermissionTests(TestCase):
             self.assertEqual(c.get(url).status_code, 200, url)
 
 
+class GranularPermissionTests(TestCase):
+    """Los permisos "de operación" (mark_paid_invoice, charge_invoice_paypal,
+    view_iva_report) gatean su acción por separado de add/change/view_invoice
+    -- y el listado ahora acepta CUALQUIER permiso sobre el modelo, mientras
+    que el detalle sigue exigiendo view_<modelo> específicamente."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command('setup_roles')
+        cls.brand, cls.group, cls.supplier, cls.product, cls.customer = _make_catalog()
+
+    def _user_con_permisos(self, username, *codenames):
+        from django.contrib.auth.models import Permission
+        u = User.objects.create_user(username, password='x')
+        for cn in codenames:
+            u.user_permissions.add(Permission.objects.get(codename=cn))
+        return User.objects.get(pk=u.pk)  # recarga la caché de permisos
+
+    def test_change_invoice_ya_no_alcanza_para_marcar_pagado(self):
+        invoice = Invoice.objects.create(customer=self.customer, total=Decimal('10.00'))
+        c = Client(); c.force_login(self._user_con_permisos('gp_change', 'view_invoice', 'change_invoice'))
+        r = c.post(f'/invoices/{invoice.pk}/mark-paid/', {'payment_method': 'efectivo'})
+        self.assertEqual(r.status_code, 403)
+
+    def test_mark_paid_invoice_permite_marcar_pagado(self):
+        invoice = Invoice.objects.create(customer=self.customer, total=Decimal('10.00'))
+        c = Client(); c.force_login(self._user_con_permisos('gp_markpaid', 'view_invoice', 'mark_paid_invoice'))
+        c.post(f'/invoices/{invoice.pk}/mark-paid/', {'payment_method': 'efectivo'})
+        invoice.refresh_from_db()
+        self.assertEqual(invoice.payment_status, 'PAGADA')
+
+    def test_change_invoice_ya_no_alcanza_para_cobrar_con_paypal(self):
+        invoice = Invoice.objects.create(customer=self.customer, total=Decimal('10.00'))
+        c = Client(); c.force_login(self._user_con_permisos('gp_paypal_no', 'view_invoice', 'change_invoice'))
+        r = c.post(f'/invoices/{invoice.pk}/paypal/start/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_charge_invoice_paypal_pasa_el_permiso_y_llega_al_flujo(self):
+        invoice = Invoice.objects.create(customer=self.customer, total=Decimal('10.00'))
+        c = Client(); c.force_login(self._user_con_permisos('gp_paypal_si', 'view_invoice', 'charge_invoice_paypal'))
+        r = c.post(f'/invoices/{invoice.pk}/paypal/start/', follow=True)
+        # PayPal no está configurado en tests -- pero eso se evalúa DESPUÉS
+        # del permiso, así que llegar a ese mensaje (no un 403) prueba que el
+        # permiso nuevo sí alcanza para esta acción.
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('no está configurado', r.content.decode())
+
+    def test_view_invoice_solo_no_alcanza_para_el_reporte_de_iva(self):
+        c = Client(); c.force_login(self._user_con_permisos('gp_iva_no', 'view_invoice'))
+        self.assertEqual(c.get('/invoices/reporte-iva/').status_code, 403)
+
+    def test_view_iva_report_permite_ver_el_reporte(self):
+        c = Client(); c.force_login(self._user_con_permisos('gp_iva_si', 'view_invoice', 'view_iva_report'))
+        self.assertEqual(c.get('/invoices/reporte-iva/').status_code, 200)
+
+    def test_listado_de_productos_visible_solo_con_view(self):
+        """Caso real de Vendedor hoy: view_product y nada más."""
+        c = Client(); c.force_login(self._user_con_permisos('gp_prod_view', 'view_product'))
+        self.assertEqual(c.get('/products/').status_code, 200)
+        self.assertEqual(c.get(f'/products/{self.product.pk}/').status_code, 200)
+
+    def test_listado_de_productos_visible_solo_con_add_pero_detalle_no(self):
+        """El listado quedó en OR (view/add/change/delete); el detalle sigue
+        exigiendo view_product específicamente, sin importar los demás."""
+        c = Client(); c.force_login(self._user_con_permisos('gp_prod_add', 'add_product'))
+        self.assertEqual(c.get('/products/').status_code, 200)
+        self.assertEqual(c.get(f'/products/{self.product.pk}/').status_code, 403)
+
+    def test_boton_ver_detalle_no_aparece_sin_view_product(self):
+        c = Client(); c.force_login(self._user_con_permisos('gp_prod_noeye', 'add_product'))
+        html = c.get('/products/').content.decode()
+        self.assertNotIn(f'href="/products/{self.product.pk}/"', html)
+
+    def test_boton_ver_detalle_aparece_con_view_product(self):
+        c = Client(); c.force_login(self._user_con_permisos('gp_prod_eye', 'view_product'))
+        html = c.get('/products/').content.decode()
+        self.assertIn(f'href="/products/{self.product.pk}/"', html)
+
+
 # =====================================================================
 # Portal del Cliente (row-level: solo SUS datos)
 # =====================================================================

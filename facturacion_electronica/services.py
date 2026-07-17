@@ -85,3 +85,17 @@ def procesar_todo(comprobante):
         avanzar_estado(comprobante)
         seguro += 1
     return comprobante
+
+
+def procesar_completo(invoice):
+    """Punto de entrada del botón único "Enviar al SRI": crea el comprobante
+    si no existe y corre TODO el ciclo (firma, recepción, autorización) de
+    una sola vez -- así quien lo usa nunca tiene que volver a hacer clic,
+    igual que en un sistema real donde el ciclo completo es un solo trámite,
+    no varios pasos manuales. La animación paso a paso que ve el usuario es
+    puramente del lado del cliente (ver invoice_detail.html); acá el
+    servidor ya deja el comprobante en su estado final."""
+    comprobante = generar_comprobante(invoice)
+    if comprobante.estado != ComprobanteElectronico.AUTORIZADO:
+        procesar_todo(comprobante)
+    return comprobante

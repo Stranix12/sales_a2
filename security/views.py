@@ -180,7 +180,14 @@ def _roles_with_colors():
 
 def _permission_matrix(selected_ids):
     """Agrupa los permisos por modelo (content type) con sus 4 acciones CRUD,
-    marcando cada uno como seleccionado o no para el rol actual."""
+    marcando cada uno como seleccionado o no para el rol actual.
+
+    Los permisos personalizados (los que no son add/change/delete/view de
+    fábrica -- p. ej. mark_paid_invoice o uno creado a mano en
+    /security/permissions/) no encajan en 'actions', así que van a 'extra'.
+    Si no se les diera un lugar en la grilla, el formulario nunca los
+    incluiría en su POST y el primer "Guardar cambios" de un rol se los
+    borraría en silencio (GroupForm reemplaza todo el conjunto)."""
     permissions = (
         Permission.objects
         .select_related('content_type')
@@ -194,11 +201,14 @@ def _permission_matrix(selected_ids):
         if key not in matrix:
             model_class = ct.model_class()
             label = model_class._meta.verbose_name.title() if model_class else ct.model
-            matrix[key] = {'label': label, 'code': f'{ct.app_label}.{ct.model}', 'actions': {}}
+            matrix[key] = {'label': label, 'code': f'{ct.app_label}.{ct.model}', 'actions': {}, 'extra': []}
+        perm.checked = perm.id in selected_ids
         for action in PERMISSION_ACTIONS:
             if perm.codename == f'{action}_{ct.model}':
-                perm.checked = perm.id in selected_ids
                 matrix[key]['actions'][action] = perm
+                break
+        else:
+            matrix[key]['extra'].append(perm)
     return sorted(
         matrix.values(),
         key=lambda m: (PERMISSION_APP_ORDER.get(m['code'].split('.')[0], 99), m['label']),
@@ -239,9 +249,11 @@ class GroupConsoleMixin:
 
         matrix = _permission_matrix(selected_ids)
         ctx['permission_matrix'] = matrix
-        ctx['total_permissions'] = sum(len(m['actions']) for m in matrix)
+        ctx['total_permissions'] = sum(len(m['actions']) + len(m['extra']) for m in matrix)
         ctx['selected_count'] = sum(
-            1 for m in matrix for perm in m['actions'].values() if perm.checked
+            1 for m in matrix
+            for perm in list(m['actions'].values()) + m['extra']
+            if perm.checked
         )
         return ctx
 
@@ -278,6 +290,13 @@ class GroupDeleteView(AdminOnlyMixin, DeleteView):
     success_url = reverse_lazy('security:group_list')
 
 # === PERMISOS / PERMISSION (solo Administrador) ===
+# Django genera el texto de los permisos automáticos (add/change/delete/view)
+# como "Can %s %s" en inglés, fijo, sin importar LANGUAGE_CODE (se guarda tal
+# cual en BD al migrar). Para mostrarlos en español sin tocar esos datos, acá
+# se arma una etiqueta de reemplazo solo para la plantilla.
+_ACCION_PERMISO_ES = {'add': 'Añadir', 'change': 'Modificar', 'delete': 'Eliminar', 'view': 'Ver'}
+
+
 class PermissionListView(AdminOnlyMixin, ListView):
     model = Permission
     template_name = 'security/permission_list.html'
@@ -299,6 +318,14 @@ class PermissionListView(AdminOnlyMixin, ListView):
                 groups[key] = {'label': label, 'app': ct.app_label,
                                'code': f'{ct.app_label}.{ct.model}', 'perms': []}
             groups[key]['perms'].append(p)
+            # Solo los 4 permisos automáticos siguen el patrón codename =
+            # "<accion>_<modelo>"; los personalizados (ej. can_approve_invoice)
+            # ya tienen su nombre en español y se muestran tal cual.
+            accion, _, resto = p.codename.partition('_')
+            if resto == ct.model and accion in _ACCION_PERMISO_ES:
+                p.nombre_mostrar = f'{_ACCION_PERMISO_ES[accion]} {groups[key]["label"].lower()}'
+            else:
+                p.nombre_mostrar = p.name
         order = {'billing': 0, 'purchasing': 1, 'auth': 2}
         ctx['permission_groups'] = sorted(
             groups.values(), key=lambda g: (order.get(g['app'], 9), g['label']))

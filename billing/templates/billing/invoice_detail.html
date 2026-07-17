@@ -1,5 +1,14 @@
 {% extends 'billing/base.html' %}
 {% block title %}Factura {{ invoice.numero_factura|default:invoice.id }}{% endblock %}
+{% block extra_head %}
+<style>
+  .sri-step-icon { width: 20px; display: inline-flex; justify-content: center; flex: 0 0 auto; }
+  .sri-spin { display: inline-block; animation: sri-spin-anim 0.9s linear infinite; }
+  @keyframes sri-spin-anim { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  #sriStepsList li { color: var(--ink-mut); transition: color .15s ease; }
+  #sriStepsList li.sri-active, #sriStepsList li.sri-done { color: var(--ink); font-weight: 600; }
+</style>
+{% endblock %}
 {% block content %}
 
 <nav aria-label="breadcrumb">
@@ -146,14 +155,15 @@
           {% endif %}
 
           <div class="d-flex flex-wrap gap-2">
+            {% if perms.facturacion_electronica.send_comprobanteelectronico %}
             {% if not comprobante or comprobante.siguiente_estado %}
-            <form method="post" action="{% url 'facturacion_electronica:enviar_al_sri' invoice.pk %}" class="d-inline">
+            <form method="post" action="{% url 'facturacion_electronica:enviar_al_sri' invoice.pk %}" id="sriForm" class="d-inline">
               {% csrf_token %}
-              <button type="submit" class="btn btn-primary btn-sm">
+              <button type="submit" class="btn btn-primary btn-sm" id="sriSubmitBtn">
                 <i class="bi bi-send me-1"></i>Enviar al SRI
-                {% if comprobante and comprobante.siguiente_estado %}(→ {{ comprobante.siguiente_estado|title }}){% else %}(iniciar){% endif %}
               </button>
             </form>
+            {% endif %}
             {% endif %}
             <a href="{% url 'facturacion_electronica:descargar_xml' invoice.pk %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-xml me-1"></i>Descargar XML</a>
             <a href="{% url 'facturacion_electronica:descargar_ride' invoice.pk %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar RIDE</a>
@@ -194,7 +204,10 @@
     <a href="{% url 'billing:invoice_pdf' invoice.pk %}" class="btn btn-outline-primary"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF</a>
     {% if invoice.tipo_pago != 'CREDITO' %}
     {% if st != 'PAGADA' %}
+    {% if perms.billing.mark_paid_invoice %}
     <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#payModal"><i class="bi bi-cash-coin me-1"></i>Marcar como pagado</button>
+    {% endif %}
+    {% if perms.billing.charge_invoice_paypal %}
     {% if paypal_configured %}
     <!-- "Cobrar", no "pagar": el vendedor inicia el checkout y es el CLIENTE
          quien ingresa su cuenta PayPal (caso mostrador). El pago en línea
@@ -210,6 +223,7 @@
     {% endif %}
     {% endif %}
     {% endif %}
+    {% endif %}
     {% if perms.billing.delete_invoice %}
     <a href="{% url 'billing:invoice_delete' invoice.pk %}" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Eliminar</a>
     {% endif %}
@@ -218,6 +232,7 @@
 
 <!-- Modal: marcar como pagado -->
 {% if invoice.tipo_pago != 'CREDITO' and st != 'PAGADA' %}
+{% if perms.billing.mark_paid_invoice %}
 <div class="modal fade" id="payModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -252,5 +267,71 @@
   </div>
 </div>
 {% endif %}
+{% endif %}
+
+<!-- Modal: procesando el envío al SRI (animación en el cliente; el servidor
+     ya completa todo el ciclo en una sola llamada, ver services.py) -->
+<div class="modal fade" id="sriProcessModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body p-4">
+        <h5 class="mb-3"><i class="bi bi-send me-2"></i>Procesando comprobante...</h5>
+        <div class="progress mb-3" style="height:8px">
+          <div class="progress-bar" id="sriProgressBar" role="progressbar" style="width:0%"></div>
+        </div>
+        <ul class="list-unstyled mb-0" id="sriStepsList">
+          <li class="d-flex align-items-center gap-2 mb-2"><span class="sri-step-icon"><i class="bi bi-circle"></i></span>Generando XML del comprobante...</li>
+          <li class="d-flex align-items-center gap-2 mb-2"><span class="sri-step-icon"><i class="bi bi-circle"></i></span>Aplicando firma electrónica...</li>
+          <li class="d-flex align-items-center gap-2 mb-2"><span class="sri-step-icon"><i class="bi bi-circle"></i></span>Enviando al SRI (recepción)...</li>
+          <li class="d-flex align-items-center gap-2 mb-0"><span class="sri-step-icon"><i class="bi bi-circle"></i></span>Esperando autorización...</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById('sriForm');
+  if (!form) return;
+  var modalEl = document.getElementById('sriProcessModal');
+  var modal = new bootstrap.Modal(modalEl);
+  var bar = document.getElementById('sriProgressBar');
+  var items = Array.prototype.slice.call(document.querySelectorAll('#sriStepsList li'));
+
+  var ICON_PENDING = '<i class="bi bi-circle"></i>';
+  var ICON_ACTIVE = '<i class="bi bi-arrow-repeat sri-spin"></i>';
+  var ICON_DONE = '<i class="bi bi-check-circle-fill text-success"></i>';
+
+  function setIcon(li, html, cls) {
+    li.querySelector('.sri-step-icon').innerHTML = html;
+    li.classList.remove('sri-active', 'sri-done');
+    if (cls) li.classList.add(cls);
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    items.forEach(function (li) { setIcon(li, ICON_PENDING); });
+    bar.style.width = '0%';
+    modal.show();
+
+    var i = 0;
+    function step() {
+      if (i > 0) setIcon(items[i - 1], ICON_DONE, 'sri-done');
+      if (i < items.length) {
+        setIcon(items[i], ICON_ACTIVE, 'sri-active');
+        bar.style.width = Math.round(((i + 1) / items.length) * 100) + '%';
+        i++;
+        setTimeout(step, 650);
+      } else {
+        // form.submit() no dispara el evento 'submit' de nuevo (comportamiento
+        // estándar del DOM), así que este envío llega limpio al servidor.
+        setTimeout(function () { form.submit(); }, 450);
+      }
+    }
+    step();
+  });
+})();
+</script>
 {% endwith %}
 {% endblock %}

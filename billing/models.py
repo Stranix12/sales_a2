@@ -12,26 +12,26 @@ class Brand(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        verbose_name = 'Brand'
-        verbose_name_plural = 'Brands'
+        verbose_name = 'Marca'
+        verbose_name_plural = 'Marcas'
         ordering = ['name']
     def __str__(self): return self.name
 
 class ProductGroup(models.Model):
     """Grupos/categorías de productos."""
-    name = models.CharField(max_length=100, unique=True, verbose_name='Group Name')
+    name = models.CharField(max_length=100, unique=True, verbose_name='Nombre de categoría')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        verbose_name = 'Product Group'
-        verbose_name_plural = 'Product Groups'
+        verbose_name = 'Categoría'
+        verbose_name_plural = 'Categorías'
         ordering = ['name']
     def __str__(self): return self.name
 
 class Supplier(models.Model):
     """Proveedores. M2M con Product."""
-    name = models.CharField(max_length=200, verbose_name='Company Name')
+    name = models.CharField(max_length=200, verbose_name='Empresa')
     contact_name = models.CharField(max_length=200, blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
@@ -40,16 +40,16 @@ class Supplier(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        verbose_name = 'Supplier'
-        verbose_name_plural = 'Suppliers'
+        verbose_name = 'Proveedor'
+        verbose_name_plural = 'Proveedores'
         ordering = ['name']
     def __str__(self): return self.name
 
 class Product(models.Model):
     """Productos. FK a Brand/Group, M2M a Supplier."""
-    name = models.CharField(max_length=200, verbose_name='Product Name')
+    name = models.CharField(max_length=200, verbose_name='Nombre')
     description = models.TextField(blank=True, null=True)
-    image = models.ImageField(upload_to='products/', blank=True, null=True, verbose_name='Image')
+    image = models.ImageField(upload_to='products/', blank=True, null=True, verbose_name='Imagen')
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name='products')
     group = models.ForeignKey(ProductGroup, on_delete=models.PROTECT, related_name='products')
     suppliers = models.ManyToManyField(Supplier, related_name='products', blank=True)
@@ -64,8 +64,8 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
-        verbose_name = 'Product'
-        verbose_name_plural = 'Products'
+        verbose_name = 'Producto'
+        verbose_name_plural = 'Productos'
         ordering = ['name']
     def __str__(self): return f'{self.name} ({self.brand.name})'
     @property
@@ -96,6 +96,8 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     class Meta:
+        verbose_name = 'Cliente'
+        verbose_name_plural = 'Clientes'
         ordering = ['last_name', 'first_name']
     def __str__(self): return f'{self.last_name}, {self.first_name}'
     @property
@@ -110,7 +112,9 @@ class CustomerProfile(models.Model):
     payment_terms = models.CharField(max_length=15, choices=PAYMENT, default='cash')
     credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     notes = models.TextField(blank=True, null=True)
-    class Meta: verbose_name = 'Customer Profile'
+    class Meta:
+        verbose_name = 'Perfil de cliente'
+        verbose_name_plural = 'Perfiles de cliente'
     def __str__(self): return f'Profile: {self.customer}'
 
 class Invoice(models.Model):
@@ -155,7 +159,15 @@ class Invoice(models.Model):
     payment_method = models.CharField(max_length=15, choices=PAYMENT_METHOD, blank=True, null=True,
                                       verbose_name='Método de pago')
     payment_date = models.DateTimeField(blank=True, null=True, verbose_name='Fecha de pago')
-    class Meta: ordering = ['-invoice_date']
+    class Meta:
+        verbose_name = 'Factura'
+        verbose_name_plural = 'Facturas'
+        ordering = ['-invoice_date']
+        permissions = [
+            ('mark_paid_invoice', 'Puede marcar facturas como pagadas'),
+            ('charge_invoice_paypal', 'Puede cobrar facturas con PayPal'),
+            ('view_iva_report', 'Puede ver el reporte de IVA'),
+        ]
     def __str__(self): return f'Invoice #{self.id} - {self.customer}'
 
     @property
@@ -175,7 +187,8 @@ class PaymentLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     class Meta:
         ordering = ['-created_at']
-        verbose_name = 'Payment Log'
+        verbose_name = 'Registro de pago'
+        verbose_name_plural = 'Registros de pago'
     def __str__(self): return f'Pago factura #{self.invoice_id} ({self.method}) ${self.amount}'
 
 class InvoiceDetail(models.Model):
@@ -186,6 +199,9 @@ class InvoiceDetail(models.Model):
     unit_price = models.DecimalField(max_digits=12, decimal_places=2,
                                      validators=[MinValueValidator(Decimal('0.01'))])
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    class Meta:
+        verbose_name = 'Detalle de factura'
+        verbose_name_plural = 'Detalles de factura'
     def __str__(self): return f'{self.product.name} x {self.quantity}'
     def save(self, *args, **kwargs):
         self.subtotal = self.quantity * self.unit_price

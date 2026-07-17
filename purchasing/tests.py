@@ -104,6 +104,18 @@ class PurchasePermissionTests(TestCase):
         c = Client(); c.force_login(self.vendedor)
         self.assertEqual(c.get(f'/purchases/{purchase.pk}/delete/').status_code, 403)
 
+    def test_view_purchase_solo_no_alcanza_para_el_reporte_de_costo(self):
+        """view_purchase_report es un permiso propio, separado de view_purchase."""
+        from django.contrib.auth.models import Permission
+        u = User.objects.create_user('sin_reporte', password='x')
+        u.user_permissions.add(Permission.objects.get(codename='view_purchase'))
+        c = Client(); c.force_login(User.objects.get(pk=u.pk))
+        self.assertEqual(c.get('/purchases/report/').status_code, 403)
+
+    def test_analista_compras_ve_el_reporte_de_costo(self):
+        c = Client(); c.force_login(self.comprador)
+        self.assertEqual(c.get('/purchases/report/').status_code, 200)
+
 
 class PurchaseDeleteTests(TestCase):
     """Una compra a crédito tiene CuotaCompra con on_delete=PROTECT: borrarla

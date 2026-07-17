@@ -7,13 +7,13 @@ los reutiliza para el mismo flujo aplicado a las compras.
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.core.exceptions import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import ListView
 
 from billing.mixins import ExportListMixin
 from billing.models import Invoice
+from shared.mixins import AnyPermissionRequiredMixin
 from .forms import RegistrarPagoForm, CuotaPagoFormSet, CuotaFilterForm
 from .models import CuotaVenta, PagoCuotaVenta
 from .receipts import pago_cuota_venta_pdf_response
@@ -21,10 +21,11 @@ from .services import registrar_pagos_venta
 
 
 # ============================================================= listado =====
-class CuotaVentaListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class CuotaVentaListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     """Consulta de cuotas de venta (por defecto, solo las pendientes)."""
     model = CuotaVenta
-    permission_required = 'creditos_ventas.view_cuotaventa'
+    permission_required = ('creditos_ventas.view_cuotaventa', 'creditos_ventas.add_cuotaventa',
+                           'creditos_ventas.change_cuotaventa', 'creditos_ventas.delete_cuotaventa')
     template_name = 'creditos_ventas/cuota_venta_list.html'
     context_object_name = 'items'
     paginate_by = 15

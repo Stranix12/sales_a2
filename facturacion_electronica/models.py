@@ -44,6 +44,9 @@ class ComprobanteElectronico(models.Model):
         verbose_name = 'Comprobante electrónico'
         verbose_name_plural = 'Comprobantes electrónicos'
         ordering = ['-created_at']
+        permissions = [
+            ('send_comprobanteelectronico', 'Puede enviar comprobantes al SRI'),
+        ]
 
     def __str__(self):
         return f'Comprobante {self.clave_acceso or self.invoice_id} ({self.estado})'

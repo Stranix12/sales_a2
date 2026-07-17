@@ -5,13 +5,15 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from billing.models import Product
 from creditos_compras.services import generar_cuotas_compra
+from shared.decorators import any_permission_required
 from .models import Purchase, PurchaseDetail
 from .forms import PurchaseForm, PurchaseDetailFormSet, PurchaseFilterForm
 from .exports import export_purchase_excel, export_purchase_pdf
 
 
 @login_required
-@permission_required('purchasing.view_purchase', raise_exception=True)
+@any_permission_required(('purchasing.view_purchase', 'purchasing.add_purchase',
+                          'purchasing.change_purchase', 'purchasing.delete_purchase'))
 def purchase_list(request):
     """Reto 3: filtra por proveedor y por rango de fechas / año."""
     purchases = Purchase.objects.select_related('supplier')
@@ -71,7 +73,7 @@ def purchase_create(request):
                     stock=F('stock') + detail.quantity
                 )
 
-            messages.success(request, f'Purchase #{purchase.id} created!')
+            messages.success(request, f'Compra #{purchase.id} creada correctamente.')
             return redirect('purchasing:purchase_list')
     else:
         form = PurchaseForm()
@@ -116,7 +118,7 @@ def purchase_export_excel(request, pk):
 
 
 @login_required
-@permission_required('purchasing.view_purchase', raise_exception=True)
+@permission_required('purchasing.view_purchase_report', raise_exception=True)
 def purchase_report(request):
     """Reto 4: costo promedio de compra por producto."""
     report = (
@@ -145,6 +147,6 @@ def purchase_delete(request, pk):
                 'asociado (compra a crédito). Elimina primero sus cuotas o pagos.'
             )
             return redirect('purchasing:purchase_detail', pk=pid)
-        messages.success(request, f'Purchase #{pid} deleted!')
+        messages.success(request, f'Compra #{pid} eliminada correctamente.')
         return redirect('purchasing:purchase_list')
     return render(request, 'purchasing/purchase_confirm_delete.html', {'object': purchase})

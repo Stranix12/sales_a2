@@ -165,19 +165,17 @@ class VistasComprobanteTests(TestCase):
         self.invoice.details.create(product=self.product, quantity=5, unit_price=Decimal('10.00'), subtotal=Decimal('50.00'))
         generar_comprobante(self.invoice)
 
-    def test_enviar_al_sri_avanza_estado(self):
+    def test_enviar_al_sri_completa_todo_el_ciclo_en_un_solo_click(self):
+        """El botón único corre GENERADO->FIRMADO->RECIBIDO->AUTORIZADO de
+        una sola vez -- ya no hace falta pulsar "Enviar al SRI" varias veces."""
         c = Client(); c.force_login(self.admin)
         r = c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/', follow=True)
         self.assertEqual(r.status_code, 200)
         self.invoice.comprobante.refresh_from_db()
-        self.assertEqual(self.invoice.comprobante.estado, ComprobanteElectronico.FIRMADO)
+        self.assertEqual(self.invoice.comprobante.estado, ComprobanteElectronico.AUTORIZADO)
 
     def test_autorizar_reenvia_correo_con_xml_adjunto(self):
         c = Client(); c.force_login(self.admin)
-        # Firmado -> Recibido -> Autorizado: recién en la última no envía correo.
-        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
-        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
-        self.assertEqual(len(mail.outbox), 0)
         c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
 
         self.invoice.comprobante.refresh_from_db()
@@ -190,8 +188,7 @@ class VistasComprobanteTests(TestCase):
 
     def test_reenviar_sobre_autorizado_no_duplica_correo(self):
         c = Client(); c.force_login(self.admin)
-        for _ in range(3):
-            c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+        c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
         self.assertEqual(len(mail.outbox), 1)
         c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')  # ya autorizado: idempotente
         self.assertEqual(len(mail.outbox), 1)
@@ -213,6 +210,30 @@ class VistasComprobanteTests(TestCase):
         c = Client(); c.force_login(self.comprador)
         r = c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
         self.assertEqual(r.status_code, 403)
+
+    def test_change_comprobante_ya_no_alcanza_para_enviar_al_sri(self):
+        """send_comprobanteelectronico es un permiso propio, separado de
+        change_comprobanteelectronico (que sigue existiendo pero ya no
+        gatea esta acción)."""
+        from django.contrib.auth.models import Permission
+        u = User.objects.create_user('solo_change_comp', password='x')
+        u.user_permissions.add(Permission.objects.get(codename='change_comprobanteelectronico'))
+        c = Client(); c.force_login(User.objects.get(pk=u.pk))
+        r = c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+        self.assertEqual(r.status_code, 403)
+
+    def test_send_comprobanteelectronico_permite_enviar_al_sri(self):
+        from django.contrib.auth.models import Permission
+        u = User.objects.create_user('con_send_comp', password='x')
+        u.user_permissions.add(Permission.objects.get(codename='send_comprobanteelectronico'))
+        c = Client(); c.force_login(User.objects.get(pk=u.pk))
+        # Sin follow: el redirect posterior a invoice_detail exige
+        # billing.view_invoice, un permiso aparte que este usuario no tiene
+        # -- lo que importa acá es que enviar_al_sri en sí no dio 403.
+        r = c.post(f'/facturacion/factura/{self.invoice.pk}/enviar-sri/')
+        self.assertEqual(r.status_code, 302)
+        self.invoice.comprobante.refresh_from_db()
+        self.assertEqual(self.invoice.comprobante.estado, ComprobanteElectronico.AUTORIZADO)
 
 
 # =====================================================================

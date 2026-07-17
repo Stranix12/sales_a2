@@ -6,7 +6,7 @@ Corre con: python manage.py test security
 import re
 from decimal import Decimal
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from django.core import mail
 from django.core.management import call_command
 from django.test import Client, TestCase
@@ -267,6 +267,44 @@ class RolesPantallasTests(TestCase):
         for url in ['/security/users/', '/security/roles/', '/security/users/create/']:
             r = c.get(url)
             self.assertEqual(r.status_code, 302, url)  # lo saca a la página principal
+
+    def test_guardar_un_rol_no_borra_sus_permisos_personalizados(self):
+        """_permission_matrix() agrupa los permisos en 'actions' (los 4 de
+        siempre) y 'extra' (cualquier otro, como mark_paid_invoice). Si
+        'extra' no se dibujara como checkbox en el formulario, la próxima vez
+        que un Administrador abra un rol y pulse "Guardar cambios" perdería
+        en silencio esos permisos (GroupForm reemplaza todo el conjunto)."""
+        rol = Group.objects.get(name='Vendedor')
+        ids_antes = set(rol.permissions.values_list('id', flat=True))
+        self.assertTrue(
+            rol.permissions.filter(codename='mark_paid_invoice').exists(),
+            'este test asume que setup_roles ya le dio mark_paid_invoice a Vendedor',
+        )
+
+        c = Client(); c.force_login(self.admin)
+        # Simula un "Guardar cambios" sin tocar nada: se reenvían exactamente
+        # los permisos que ya estaban marcados (así es como llegaría el POST
+        # real del navegador, con los checkboxes ya tildados).
+        r = c.post(f'/security/roles/{rol.pk}/edit/', {
+            'name': rol.name,
+            'permissions': list(ids_antes),
+        }, follow=True)
+        self.assertEqual(r.status_code, 200)
+
+        rol.refresh_from_db()
+        ids_despues = set(rol.permissions.values_list('id', flat=True))
+        self.assertEqual(ids_antes, ids_despues)
+        self.assertTrue(rol.permissions.filter(codename='mark_paid_invoice').exists())
+
+    def test_la_grilla_de_roles_incluye_los_permisos_personalizados(self):
+        """El checkbox de un permiso personalizado debe existir en el HTML
+        (si no existe, nunca puede llegar en el POST del formulario)."""
+        rol = Group.objects.get(name='Vendedor')
+        c = Client(); c.force_login(self.admin)
+        html = c.get(f'/security/roles/{rol.pk}/edit/').content.decode()
+        perm = Permission.objects.get(codename='mark_paid_invoice')
+        self.assertIn(f'value="{perm.id}"', html)
+        self.assertIn('checked', html)  # ya asignado a Vendedor por setup_roles
 
 
 # =====================================================================

@@ -13,5 +13,9 @@ class UserSecurityProfile(models.Model):
     )
     must_change_password = models.BooleanField(default=False)
 
+    class Meta:
+        verbose_name = 'Perfil de seguridad de usuario'
+        verbose_name_plural = 'Perfiles de seguridad de usuario'
+
     def __str__(self):
         return f'Perfil de seguridad de {self.user}'

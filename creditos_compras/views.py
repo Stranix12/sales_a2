@@ -6,13 +6,13 @@ Reutiliza los helpers parametrizados de creditos_ventas.views
 flujo aplicado a Purchase + CuotaCompra en lugar de Invoice + CuotaVenta.
 """
 from django.contrib.auth.decorators import login_required, permission_required
-from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.shortcuts import get_object_or_404
 from django.views.generic import ListView
 
 from billing.mixins import ExportListMixin
 from creditos_ventas.views import _procesar_pago, _render_plan
 from purchasing.models import Purchase
+from shared.mixins import AnyPermissionRequiredMixin
 from .forms import CuotaFilterForm
 from .models import CuotaCompra, PagoCuotaCompra
 from .receipts import pago_cuota_compra_pdf_response
@@ -20,10 +20,11 @@ from .services import registrar_pagos_compra
 
 
 # ============================================================= listado =====
-class CuotaCompraListView(ExportListMixin, PermissionRequiredMixin, ListView):
+class CuotaCompraListView(ExportListMixin, AnyPermissionRequiredMixin, ListView):
     """Consulta de cuotas de compra (por defecto, solo las pendientes)."""
     model = CuotaCompra
-    permission_required = 'creditos_compras.view_cuotacompra'
+    permission_required = ('creditos_compras.view_cuotacompra', 'creditos_compras.add_cuotacompra',
+                           'creditos_compras.change_cuotacompra', 'creditos_compras.delete_cuotacompra')
     template_name = 'creditos_compras/cuota_compra_list.html'
     context_object_name = 'items'
     paginate_by = 15

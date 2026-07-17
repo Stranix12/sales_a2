@@ -1,5 +1,25 @@
 from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.shortcuts import redirect
+
+
+class AnyPermissionRequiredMixin(PermissionRequiredMixin):
+    """Como PermissionRequiredMixin, pero exige AL MENOS UNO de los permisos
+    listados en permission_required, no todos.
+
+    Se usa en los ListView: el listado debe verse con cualquier permiso sobre
+    el modelo (ver, crear, editar o eliminar), mientras que el permiso "ver"
+    queda reservado para el detalle de cada fila (ver AnyPermissionRequiredMixin
+    no se usa ahí, solo en listados).
+
+    Uso:
+        class ProductListView(AnyPermissionRequiredMixin, ListView):
+            permission_required = ('billing.view_product', 'billing.add_product',
+                                   'billing.change_product', 'billing.delete_product')
+    """
+    def has_permission(self):
+        perms = self.get_permission_required()
+        return any(self.request.user.has_perm(p) for p in perms)
 
 
 class StaffRequiredMixin:
@@ -35,7 +55,7 @@ class GroupRequiredMixin:
     """
     group_required = []        # Lista de roles permitidos
     group_redirect_url = '/'   # A dónde redirigir si no tiene el rol
-    group_error_message = 'You do not have permission to access this option.'
+    group_error_message = 'No tienes permiso para acceder a esta opción.'
 
     def dispatch(self, request, *args, **kwargs):
         # 1. Si no inició sesión -> al login

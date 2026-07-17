@@ -153,7 +153,9 @@ class IvaReportViewTests(TestCase):
 
 
 class IvaReportPermissionTests(TestCase):
-    """Requiere billing.view_invoice -- ni mas ni menos que ver facturas."""
+    """Requiere billing.view_iva_report -- un permiso propio, separado de
+    view_invoice (ver la lista/detalle de facturas no da acceso al reporte
+    de impuestos por sí solo; ver GranularPermissionTests en billing/tests.py)."""
     @classmethod
     def setUpTestData(cls):
         call_command('setup_roles')

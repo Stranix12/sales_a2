@@ -1,5 +1,5 @@
 {% extends 'billing/base.html' %}
-{% block title %}Brands{% endblock %}
+{% block title %}Marcas{% endblock %}
 {% block content %}
 <div class="page-head">
   <div class="page-head-title">
@@ -66,7 +66,9 @@
           </td>
           {% endfor %}
           <td class="row-actions">
+            {% if perms.billing.view_brand %}
             <a href="{% url 'billing:brand_detail' item.pk %}" class="act-btn act-view" title="Ver detalle"><i class="bi bi-eye"></i></a>
+            {% endif %}
             {% if perms.billing.change_brand %}
             <a href="{% url 'billing:brand_update' item.pk %}" class="act-btn act-edit" title="Editar"><i class="bi bi-pencil"></i></a>
             {% endif %}

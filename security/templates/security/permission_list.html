@@ -1,5 +1,5 @@
 {% extends 'billing/base.html' %}
-{% block title %}Permissions{% endblock %}
+{% block title %}Permisos{% endblock %}
 {% block extra_head %}
 <style>
   .perm-toolbar { position: relative; max-width: 400px; margin-bottom: 18px; }
@@ -64,7 +64,7 @@
       {% for p in g.perms %}
       <li class="perm-item">
         <div class="min-w-0">
-          <div class="act">{{ p.name }}</div>
+          <div class="act">{{ p.nombre_mostrar }}</div>
           <div class="cn">{{ p.codename }}</div>
         </div>
         <span class="perm-item-actions">
